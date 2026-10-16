@@ -29,10 +29,11 @@ $cFlags = @(
 
 if ($Scalar) {
     Write-Host "Building scalar flavor (no SIMD)..."
+    $cFlags += @("-DBOX3D_DISABLE_SIMD")
     $outFile = "dist/box3d.scalar.js"
 } else {
     Write-Host "Building SIMD flavor (SSE2 -> WASM SIMD128)..."
-    $cFlags += @("-msimd128", "-msse2", "-DB3_SIMD_ENABLED", "-DB3_SIMD_SSE2")
+    $cFlags += @("-msimd128", "-msse2")
     $outFile = "dist/box3d.js"
 }
 

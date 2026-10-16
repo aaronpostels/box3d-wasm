@@ -16,15 +16,16 @@ export async function initBox3D(
     options?: Record<string, unknown>
 ): Promise<RawBox3DModule> {
     if (!factoryOrModule) {
-        // Dynamic import fallback for standard dist output
         try {
+            // Emitted dist/index.js sits in the same directory as dist/box3d.js
             // @ts-ignore
-            const mod = await import("../../dist/box3d.js");
+            const mod = await import("./box3d.js");
             const factory = (mod.default ?? mod) as Box3DModuleFactory;
             return await factory(options);
         } catch (err) {
             throw new Error(
-                "Could not auto-load 'dist/box3d.js'. Please build WASM first or pass the module factory explicitly: initBox3D(Box3DModuleFactory)."
+                "Could not load './box3d.js'. Please build WASM first (e.g. pnpm run build:wasm) or pass the module factory explicitly: initBox3D(Box3DModuleFactory).",
+                { cause: err }
             );
         }
     }

@@ -34,15 +34,16 @@ OUT_FILE="dist/box3d.js"
 
 if [ "$FLAVOR" = "scalar" ]; then
     echo "Building scalar flavor (no SIMD)..."
+    C_FLAGS+=(-DBOX3D_DISABLE_SIMD)
     OUT_FILE="dist/box3d.scalar.js"
 elif [ "$FLAVOR" = "threads" ]; then
     echo "Building threaded SIMD flavor (-pthread)..."
-    C_FLAGS+=(-msimd128 -msse2 -DB3_SIMD_ENABLED -DB3_SIMD_SSE2)
+    C_FLAGS+=(-msimd128 -msse2)
     LINK_FLAGS+=(-pthread -s USE_PTHREADS=1 -s SHARED_MEMORY=1)
     OUT_FILE="dist/box3d.threads.js"
 else
     echo "Building standard SIMD flavor (SSE2 -> WASM SIMD128)..."
-    C_FLAGS+=(-msimd128 -msse2 -DB3_SIMD_ENABLED -DB3_SIMD_SSE2)
+    C_FLAGS+=(-msimd128 -msse2)
 fi
 
 echo "Compiling with emcc..."

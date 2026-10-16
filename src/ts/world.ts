@@ -31,6 +31,9 @@ export class Box3DWorld {
     constructor(wasm: RawBox3DModule, gravity: Vec3Tuple = [0, -9.81, 0]) {
         this.wasm = wasm;
         this.worldId = wasm._b3Glue_CreateWorld(gravity[0], gravity[1], gravity[2]);
+        if (!wasm._b3Glue_WorldIsValid(this.worldId)) {
+            throw new Error("Box3DWorld: failed to create simulation world (maximum world count exceeded or invalid configuration).");
+        }
         // Scratch buffer: 32 floats (128 bytes) for single-item queries
         this.scratchPtr = wasm._malloc(128);
         if (!this.scratchPtr) {
@@ -120,7 +123,7 @@ export class Box3DWorld {
     public getTransform(bodyId: BodyId, outTransform?: Transform): Transform {
         this.checkDestroyed();
         this.wasm._b3Glue_GetTransform(bodyId, this.scratchPtr);
-        const floatOffset = this.scratchPtr >> 2;
+        const floatOffset = this.scratchPtr >>> 2;
         const h = this.wasm.HEAPF32;
 
         const pos: Vec3Tuple = [h[floatOffset + 0], h[floatOffset + 1], h[floatOffset + 2]];
@@ -161,9 +164,9 @@ export class Box3DWorld {
         this.ensureBatchCapacity(count);
 
         // Copy body IDs into WASM heap
-        const idOffset = this.batchIdsPtr >> 3;
+        const idOffset = this.batchIdsPtr >>> 3;
         if (bodyIds instanceof BigUint64Array) {
-            this.wasm.HEAPU64.set(bodyIds.subarray(0, count), idOffset);
+            this.wasm.HEAPU64.set(bodyIds, idOffset);
         } else {
             for (let i = 0; i < count; ++i) {
                 this.wasm.HEAPU64[idOffset + i] = bodyIds[i];
@@ -174,7 +177,7 @@ export class Box3DWorld {
         this.wasm._b3Glue_GetBatchTransforms(this.batchIdsPtr, count, this.batchFloatsPtr);
 
         const floatCount = count * 7;
-        const floatOffset = this.batchFloatsPtr >> 2;
+        const floatOffset = this.batchFloatsPtr >>> 2;
 
         // Recreate or reuse cached view; handles memory growth detachment automatically
         if (
@@ -202,7 +205,7 @@ export class Box3DWorld {
     public getLinearVelocity(bodyId: BodyId): Vec3Tuple {
         this.checkDestroyed();
         this.wasm._b3Glue_GetLinearVelocity(bodyId, this.scratchPtr);
-        const o = this.scratchPtr >> 2;
+        const o = this.scratchPtr >>> 2;
         return [this.wasm.HEAPF32[o], this.wasm.HEAPF32[o + 1], this.wasm.HEAPF32[o + 2]];
     }
 
@@ -237,7 +240,7 @@ export class Box3DWorld {
 
         if (!hit) return null;
 
-        const o = this.scratchPtr >> 2;
+        const o = this.scratchPtr >>> 2;
         const h = this.wasm.HEAPF32;
         return {
             hit: true,
