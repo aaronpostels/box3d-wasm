@@ -26,12 +26,17 @@ export class Box3DWorld {
     private batchIdsPtr = 0;
     private batchFloatsPtr = 0;
     private batchCapacity = 0;
+    private cachedWasmFloatView: Float32Array | null = null;
 
     constructor(wasm: RawBox3DModule, gravity: Vec3Tuple = [0, -9.81, 0]) {
         this.wasm = wasm;
         this.worldId = wasm._b3Glue_CreateWorld(gravity[0], gravity[1], gravity[2]);
         // Scratch buffer: 32 floats (128 bytes) for single-item queries
         this.scratchPtr = wasm._malloc(128);
+        if (!this.scratchPtr) {
+            wasm._b3Glue_DestroyWorld(this.worldId);
+            throw new Error("Box3DWorld: failed to allocate scratch buffer (out of memory).");
+        }
     }
 
     public get id(): WorldId {
@@ -143,6 +148,10 @@ export class Box3DWorld {
      * Bulk transform synchronization: updates all given bodies into a contiguous Float32Array
      * in a single native call with 0 per-body JS invocation overhead.
      * Output format per body: 7 floats [px, py, pz, qx, qy, qz, qw].
+     *
+     * @note When targetBuffer is omitted, returns a direct view into WASM memory.
+     * Subsequent syncBatchTransforms calls will overwrite this data, and WASM heap growth can
+     * detach it. Pass targetBuffer or use .slice() if retaining the array across frames.
      */
     public syncBatchTransforms(bodyIds: BodyId[] | BigUint64Array, targetBuffer?: Float32Array): Float32Array {
         this.checkDestroyed();
@@ -161,17 +170,24 @@ export class Box3DWorld {
         this.wasm._b3Glue_GetBatchTransforms(this.batchIdsPtr, count, this.batchFloatsPtr);
 
         const floatCount = count * 7;
-        const wasmFloatView = this.wasm.HEAPF32.subarray(
-            this.batchFloatsPtr >> 2,
-            (this.batchFloatsPtr >> 2) + floatCount
-        );
+        const floatOffset = this.batchFloatsPtr >> 2;
 
         if (targetBuffer) {
-            targetBuffer.set(wasmFloatView);
+            targetBuffer.set(this.wasm.HEAPF32.subarray(floatOffset, floatOffset + floatCount));
             return targetBuffer;
         }
 
-        return wasmFloatView;
+        // Recreate or reuse cached view; handles memory growth detachment automatically
+        if (
+            !this.cachedWasmFloatView ||
+            this.cachedWasmFloatView.buffer.byteLength === 0 ||
+            this.cachedWasmFloatView.byteOffset !== this.batchFloatsPtr ||
+            this.cachedWasmFloatView.length !== floatCount
+        ) {
+            this.cachedWasmFloatView = this.wasm.HEAPF32.subarray(floatOffset, floatOffset + floatCount);
+        }
+
+        return this.cachedWasmFloatView;
     }
 
     public setLinearVelocity(bodyId: BodyId, v: Vec3Tuple): void {
@@ -234,6 +250,7 @@ export class Box3DWorld {
             this.wasm._free(this.batchIdsPtr);
             this.wasm._free(this.batchFloatsPtr);
         }
+        this.cachedWasmFloatView = null;
         this.wasm._b3Glue_DestroyWorld(this.worldId);
         this.isDestroyed = true;
     }
@@ -241,16 +258,25 @@ export class Box3DWorld {
     private ensureBatchCapacity(count: number): void {
         if (count <= this.batchCapacity) return;
 
+        const newCapacity = Math.max(count, 64);
+        const newIdsPtr = this.wasm._malloc(newCapacity * 8);
+        const newFloatsPtr = this.wasm._malloc(newCapacity * 28);
+
+        if (!newIdsPtr || !newFloatsPtr) {
+            if (newIdsPtr) this.wasm._free(newIdsPtr);
+            if (newFloatsPtr) this.wasm._free(newFloatsPtr);
+            throw new Error(`Box3DWorld: failed to allocate batch buffers for count ${count} (out of memory).`);
+        }
+
         if (this.batchCapacity > 0) {
             this.wasm._free(this.batchIdsPtr);
             this.wasm._free(this.batchFloatsPtr);
         }
 
-        this.batchCapacity = Math.max(count, 64);
-        // IDs: 8 bytes each
-        this.batchIdsPtr = this.wasm._malloc(this.batchCapacity * 8);
-        // Transforms: 7 floats (28 bytes) each
-        this.batchFloatsPtr = this.wasm._malloc(this.batchCapacity * 28);
+        this.batchCapacity = newCapacity;
+        this.batchIdsPtr = newIdsPtr;
+        this.batchFloatsPtr = newFloatsPtr;
+        this.cachedWasmFloatView = null;
     }
 
     private checkDestroyed(): void {

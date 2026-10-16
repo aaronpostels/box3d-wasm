@@ -5,39 +5,27 @@
 #include <string.h>
 
 static inline b3WorldId unpackWorldId(uint32_t val) {
-    b3WorldId id;
-    memcpy(&id, &val, sizeof(id));
-    return id;
+    return b3LoadWorldId(val);
 }
 
 static inline uint32_t packWorldId(b3WorldId id) {
-    uint32_t val = 0;
-    memcpy(&val, &id, sizeof(id));
-    return val;
+    return b3StoreWorldId(id);
 }
 
 static inline b3BodyId unpackBodyId(uint64_t val) {
-    b3BodyId id;
-    memcpy(&id, &val, sizeof(id));
-    return id;
+    return b3LoadBodyId(val);
 }
 
 static inline uint64_t packBodyId(b3BodyId id) {
-    uint64_t val = 0;
-    memcpy(&val, &id, sizeof(id));
-    return val;
+    return b3StoreBodyId(id);
 }
 
 static inline b3ShapeId unpackShapeId(uint64_t val) {
-    b3ShapeId id;
-    memcpy(&id, &val, sizeof(id));
-    return id;
+    return b3LoadShapeId(val);
 }
 
 static inline uint64_t packShapeId(b3ShapeId id) {
-    uint64_t val = 0;
-    memcpy(&val, &id, sizeof(id));
-    return val;
+    return b3StoreShapeId(id);
 }
 
 uint32_t b3Glue_CreateWorld(float gx, float gy, float gz) {
