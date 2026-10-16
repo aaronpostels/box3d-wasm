@@ -17,6 +17,10 @@ import {
 } from "./types.js";
 
 export class Box3DWorld {
+    private static readonly EMPTY_FLOAT32 = new Float32Array(0);
+    // Maximum allowable batch count (~67M bodies) to prevent 32-bit integer overflow in byte sizes
+    private static readonly MAX_BATCH_COUNT = 0x03ffffff;
+
     private readonly wasm: RawBox3DModule;
     private readonly worldId: WorldId;
     private isDestroyed = false;
@@ -31,7 +35,7 @@ export class Box3DWorld {
     constructor(wasm: RawBox3DModule, gravity: Vec3Tuple = [0, -9.81, 0]) {
         this.wasm = wasm;
         this.worldId = wasm._b3Glue_CreateWorld(gravity[0], gravity[1], gravity[2]);
-        if (!wasm._b3Glue_WorldIsValid(this.worldId)) {
+        if (wasm._b3Glue_WorldIsValid(this.worldId) === 0) {
             throw new Error("Box3DWorld: failed to create simulation world (maximum world count exceeded or invalid configuration).");
         }
         // Scratch buffer: 32 floats (128 bytes) for single-item queries
@@ -76,7 +80,7 @@ export class Box3DWorld {
 
     public isBodyValid(bodyId: BodyId): boolean {
         this.checkDestroyed();
-        return this.wasm._b3Glue_BodyIsValid(bodyId);
+        return this.wasm._b3Glue_BodyIsValid(bodyId) !== 0;
     }
 
     public createBoxShape(bodyId: BodyId, options: BoxShapeOptions): ShapeId {
@@ -126,16 +130,21 @@ export class Box3DWorld {
         const floatOffset = this.scratchPtr >>> 2;
         const h = this.wasm.HEAPF32;
 
-        const pos: Vec3Tuple = [h[floatOffset + 0], h[floatOffset + 1], h[floatOffset + 2]];
-        const rot: QuatTuple = [h[floatOffset + 3], h[floatOffset + 4], h[floatOffset + 5], h[floatOffset + 6]];
-
         if (outTransform) {
-            outTransform.position = pos;
-            outTransform.rotation = rot;
+            outTransform.position[0] = h[floatOffset + 0];
+            outTransform.position[1] = h[floatOffset + 1];
+            outTransform.position[2] = h[floatOffset + 2];
+            outTransform.rotation[0] = h[floatOffset + 3];
+            outTransform.rotation[1] = h[floatOffset + 4];
+            outTransform.rotation[2] = h[floatOffset + 5];
+            outTransform.rotation[3] = h[floatOffset + 6];
             return outTransform;
         }
 
-        return { position: pos, rotation: rot };
+        return {
+            position: [h[floatOffset + 0], h[floatOffset + 1], h[floatOffset + 2]],
+            rotation: [h[floatOffset + 3], h[floatOffset + 4], h[floatOffset + 5], h[floatOffset + 6]]
+        };
     }
 
     public setTransform(bodyId: BodyId, position: Vec3Tuple, rotation: QuatTuple): void {
@@ -159,7 +168,7 @@ export class Box3DWorld {
     public syncBatchTransforms(bodyIds: BodyId[] | BigUint64Array, targetBuffer?: Float32Array): Float32Array {
         this.checkDestroyed();
         const count = bodyIds.length;
-        if (count === 0) return targetBuffer ?? new Float32Array(0);
+        if (count === 0) return targetBuffer ?? Box3DWorld.EMPTY_FLOAT32;
 
         this.ensureBatchCapacity(count);
 
@@ -202,16 +211,37 @@ export class Box3DWorld {
         this.wasm._b3Glue_SetLinearVelocity(bodyId, v[0], v[1], v[2]);
     }
 
-    public getLinearVelocity(bodyId: BodyId): Vec3Tuple {
+    public getLinearVelocity(bodyId: BodyId, outVec?: Vec3Tuple): Vec3Tuple {
         this.checkDestroyed();
         this.wasm._b3Glue_GetLinearVelocity(bodyId, this.scratchPtr);
         const o = this.scratchPtr >>> 2;
-        return [this.wasm.HEAPF32[o], this.wasm.HEAPF32[o + 1], this.wasm.HEAPF32[o + 2]];
+        const h = this.wasm.HEAPF32;
+        if (outVec) {
+            outVec[0] = h[o + 0];
+            outVec[1] = h[o + 1];
+            outVec[2] = h[o + 2];
+            return outVec;
+        }
+        return [h[o + 0], h[o + 1], h[o + 2]];
     }
 
     public setAngularVelocity(bodyId: BodyId, w: Vec3Tuple): void {
         this.checkDestroyed();
         this.wasm._b3Glue_SetAngularVelocity(bodyId, w[0], w[1], w[2]);
+    }
+
+    public getAngularVelocity(bodyId: BodyId, outVec?: Vec3Tuple): Vec3Tuple {
+        this.checkDestroyed();
+        this.wasm._b3Glue_GetAngularVelocity(bodyId, this.scratchPtr);
+        const o = this.scratchPtr >>> 2;
+        const h = this.wasm.HEAPF32;
+        if (outVec) {
+            outVec[0] = h[o + 0];
+            outVec[1] = h[o + 1];
+            outVec[2] = h[o + 2];
+            return outVec;
+        }
+        return [h[o + 0], h[o + 1], h[o + 2]];
     }
 
     public applyForce(bodyId: BodyId, force: Vec3Tuple, point: Vec3Tuple, wake: boolean = true): void {
@@ -229,19 +259,31 @@ export class Box3DWorld {
         this.wasm._b3Glue_ApplyAngularImpulse(bodyId, impulse[0], impulse[1], impulse[2], wake);
     }
 
-    public castRay(origin: Vec3Tuple, translation: Vec3Tuple): RayHit | null {
+    public castRay(origin: Vec3Tuple, translation: Vec3Tuple, outHit?: RayHit): RayHit | null {
         this.checkDestroyed();
         const hit = this.wasm._b3Glue_CastRayClosest(
             this.worldId,
             origin[0], origin[1], origin[2],
             translation[0], translation[1], translation[2],
             this.scratchPtr
-        );
+        ) !== 0;
 
         if (!hit) return null;
 
         const o = this.scratchPtr >>> 2;
         const h = this.wasm.HEAPF32;
+        if (outHit) {
+            outHit.hit = true;
+            outHit.fraction = h[o + 1];
+            outHit.point[0] = h[o + 2];
+            outHit.point[1] = h[o + 3];
+            outHit.point[2] = h[o + 4];
+            outHit.normal[0] = h[o + 5];
+            outHit.normal[1] = h[o + 6];
+            outHit.normal[2] = h[o + 7];
+            return outHit;
+        }
+
         return {
             hit: true,
             fraction: h[o + 1],
@@ -263,6 +305,9 @@ export class Box3DWorld {
     }
 
     private ensureBatchCapacity(count: number): void {
+        if (count < 0 || count > Box3DWorld.MAX_BATCH_COUNT) {
+            throw new RangeError(`Box3DWorld: batch count ${count} is out of bounds (max ${Box3DWorld.MAX_BATCH_COUNT}).`);
+        }
         if (count <= this.batchCapacity) return;
 
         const newCapacity = Math.max(count, 64);

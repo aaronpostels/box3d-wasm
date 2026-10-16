@@ -66,16 +66,16 @@ export interface RawBox3DModule {
     _b3Glue_CreateWorld(gx: number, gy: number, gz: number): number;
     _b3Glue_DestroyWorld(worldId: number): void;
     _b3Glue_Step(worldId: number, timeStep: number, subStepCount: number): void;
-    _b3Glue_WorldIsValid(worldId: number): boolean;
+    _b3Glue_WorldIsValid(worldId: number): number;
 
     _b3Glue_CreateBody(worldId: number, type: number, px: number, py: number, pz: number, qx: number, qy: number, qz: number, qw: number): bigint;
     _b3Glue_DestroyBody(bodyId: bigint): void;
-    _b3Glue_BodyIsValid(bodyId: bigint): boolean;
+    _b3Glue_BodyIsValid(bodyId: bigint): number;
 
     _b3Glue_CreateBoxShape(bodyId: bigint, hx: number, hy: number, hz: number, density: number, friction: number, restitution: number): bigint;
     _b3Glue_CreateSphereShape(bodyId: bigint, radius: number, density: number, friction: number, restitution: number): bigint;
     _b3Glue_CreateCapsuleShape(bodyId: bigint, radius: number, halfHeight: number, density: number, friction: number, restitution: number): bigint;
-    _b3Glue_DestroyShape(shapeId: bigint, updateMass: boolean): void;
+    _b3Glue_DestroyShape(shapeId: bigint, updateMass: boolean | number): void;
 
     _b3Glue_GetTransform(bodyId: bigint, outPtr7: number): void;
     _b3Glue_SetTransform(bodyId: bigint, px: number, py: number, pz: number, qx: number, qy: number, qz: number, qw: number): void;
@@ -86,9 +86,9 @@ export interface RawBox3DModule {
     _b3Glue_GetAngularVelocity(bodyId: bigint, outPtr3: number): void;
     _b3Glue_SetAngularVelocity(bodyId: bigint, wx: number, wy: number, wz: number): void;
 
-    _b3Glue_ApplyForce(bodyId: bigint, fx: number, fy: number, fz: number, px: number, py: number, pz: number, wake: boolean): void;
-    _b3Glue_ApplyLinearImpulse(bodyId: bigint, ix: number, iy: number, iz: number, wake: boolean): void;
-    _b3Glue_ApplyAngularImpulse(bodyId: bigint, ax: number, ay: number, az: number, wake: boolean): void;
+    _b3Glue_ApplyForce(bodyId: bigint, fx: number, fy: number, fz: number, px: number, py: number, pz: number, wake: boolean | number): void;
+    _b3Glue_ApplyLinearImpulse(bodyId: bigint, ix: number, iy: number, iz: number, wake: boolean | number): void;
+    _b3Glue_ApplyAngularImpulse(bodyId: bigint, ax: number, ay: number, az: number, wake: boolean | number): void;
 
-    _b3Glue_CastRayClosest(worldId: number, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, outPtr8: number): boolean;
+    _b3Glue_CastRayClosest(worldId: number, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, outPtr8: number): number;
 }
