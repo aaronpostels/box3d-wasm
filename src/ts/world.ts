@@ -1,0 +1,261 @@
+// SPDX-License-Identifier: MIT
+
+import {
+    RawBox3DModule,
+    WorldId,
+    BodyId,
+    ShapeId,
+    BodyType,
+    BodyTypeValue,
+    Vec3Tuple,
+    QuatTuple,
+    Transform,
+    BoxShapeOptions,
+    SphereShapeOptions,
+    CapsuleShapeOptions,
+    RayHit
+} from "./types.js";
+
+export class Box3DWorld {
+    private readonly wasm: RawBox3DModule;
+    private readonly worldId: WorldId;
+    private isDestroyed = false;
+
+    // Preallocated scratch memory buffers for zero-GC single/batch queries
+    private scratchPtr: number;
+    private batchIdsPtr = 0;
+    private batchFloatsPtr = 0;
+    private batchCapacity = 0;
+
+    constructor(wasm: RawBox3DModule, gravity: Vec3Tuple = [0, -9.81, 0]) {
+        this.wasm = wasm;
+        this.worldId = wasm._b3Glue_CreateWorld(gravity[0], gravity[1], gravity[2]);
+        // Scratch buffer: 32 floats (128 bytes) for single-item queries
+        this.scratchPtr = wasm._malloc(128);
+    }
+
+    public get id(): WorldId {
+        return this.worldId;
+    }
+
+    public step(timeStep: number = 1 / 60, subStepCount: number = 4): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_Step(this.worldId, timeStep, subStepCount);
+    }
+
+    public createBody(options: {
+        type?: BodyTypeValue;
+        position?: Vec3Tuple;
+        rotation?: QuatTuple;
+    } = {}): BodyId {
+        this.checkDestroyed();
+        const type = options.type ?? BodyType.Dynamic;
+        const [px, py, pz] = options.position ?? [0, 0, 0];
+        const [qx, qy, qz, qw] = options.rotation ?? [0, 0, 0, 1];
+
+        return this.wasm._b3Glue_CreateBody(
+            this.worldId,
+            type,
+            px, py, pz,
+            qx, qy, qz, qw
+        );
+    }
+
+    public destroyBody(bodyId: BodyId): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_DestroyBody(bodyId);
+    }
+
+    public isBodyValid(bodyId: BodyId): boolean {
+        this.checkDestroyed();
+        return this.wasm._b3Glue_BodyIsValid(bodyId);
+    }
+
+    public createBoxShape(bodyId: BodyId, options: BoxShapeOptions): ShapeId {
+        this.checkDestroyed();
+        return this.wasm._b3Glue_CreateBoxShape(
+            bodyId,
+            options.halfWidth,
+            options.halfHeight,
+            options.halfDepth,
+            options.density ?? 1.0,
+            options.friction ?? 0.6,
+            options.restitution ?? 0.0
+        );
+    }
+
+    public createSphereShape(bodyId: BodyId, options: SphereShapeOptions): ShapeId {
+        this.checkDestroyed();
+        return this.wasm._b3Glue_CreateSphereShape(
+            bodyId,
+            options.radius,
+            options.density ?? 1.0,
+            options.friction ?? 0.6,
+            options.restitution ?? 0.0
+        );
+    }
+
+    public createCapsuleShape(bodyId: BodyId, options: CapsuleShapeOptions): ShapeId {
+        this.checkDestroyed();
+        return this.wasm._b3Glue_CreateCapsuleShape(
+            bodyId,
+            options.radius,
+            options.halfHeight,
+            options.density ?? 1.0,
+            options.friction ?? 0.6,
+            options.restitution ?? 0.0
+        );
+    }
+
+    public destroyShape(shapeId: ShapeId, updateBodyMass: boolean = true): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_DestroyShape(shapeId, updateBodyMass);
+    }
+
+    public getTransform(bodyId: BodyId, outTransform?: Transform): Transform {
+        this.checkDestroyed();
+        this.wasm._b3Glue_GetTransform(bodyId, this.scratchPtr);
+        const floatOffset = this.scratchPtr >> 2;
+        const h = this.wasm.HEAPF32;
+
+        const pos: Vec3Tuple = [h[floatOffset + 0], h[floatOffset + 1], h[floatOffset + 2]];
+        const rot: QuatTuple = [h[floatOffset + 3], h[floatOffset + 4], h[floatOffset + 5], h[floatOffset + 6]];
+
+        if (outTransform) {
+            outTransform.position = pos;
+            outTransform.rotation = rot;
+            return outTransform;
+        }
+
+        return { position: pos, rotation: rot };
+    }
+
+    public setTransform(bodyId: BodyId, position: Vec3Tuple, rotation: QuatTuple): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_SetTransform(
+            bodyId,
+            position[0], position[1], position[2],
+            rotation[0], rotation[1], rotation[2], rotation[3]
+        );
+    }
+
+    /**
+     * Bulk transform synchronization: updates all given bodies into a contiguous Float32Array
+     * in a single native call with 0 per-body JS invocation overhead.
+     * Output format per body: 7 floats [px, py, pz, qx, qy, qz, qw].
+     */
+    public syncBatchTransforms(bodyIds: BodyId[] | BigUint64Array, targetBuffer?: Float32Array): Float32Array {
+        this.checkDestroyed();
+        const count = bodyIds.length;
+        if (count === 0) return targetBuffer ?? new Float32Array(0);
+
+        this.ensureBatchCapacity(count);
+
+        // Copy body IDs into WASM heap
+        const idOffset = this.batchIdsPtr >> 3;
+        for (let i = 0; i < count; ++i) {
+            this.wasm.HEAPU64[idOffset + i] = bodyIds[i];
+        }
+
+        // Native batch read
+        this.wasm._b3Glue_GetBatchTransforms(this.batchIdsPtr, count, this.batchFloatsPtr);
+
+        const floatCount = count * 7;
+        const wasmFloatView = this.wasm.HEAPF32.subarray(
+            this.batchFloatsPtr >> 2,
+            (this.batchFloatsPtr >> 2) + floatCount
+        );
+
+        if (targetBuffer) {
+            targetBuffer.set(wasmFloatView);
+            return targetBuffer;
+        }
+
+        return wasmFloatView;
+    }
+
+    public setLinearVelocity(bodyId: BodyId, v: Vec3Tuple): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_SetLinearVelocity(bodyId, v[0], v[1], v[2]);
+    }
+
+    public getLinearVelocity(bodyId: BodyId): Vec3Tuple {
+        this.checkDestroyed();
+        this.wasm._b3Glue_GetLinearVelocity(bodyId, this.scratchPtr);
+        const o = this.scratchPtr >> 2;
+        return [this.wasm.HEAPF32[o], this.wasm.HEAPF32[o + 1], this.wasm.HEAPF32[o + 2]];
+    }
+
+    public setAngularVelocity(bodyId: BodyId, w: Vec3Tuple): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_SetAngularVelocity(bodyId, w[0], w[1], w[2]);
+    }
+
+    public applyForce(bodyId: BodyId, force: Vec3Tuple, point: Vec3Tuple, wake: boolean = true): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_ApplyForce(bodyId, force[0], force[1], force[2], point[0], point[1], point[2], wake);
+    }
+
+    public applyLinearImpulse(bodyId: BodyId, impulse: Vec3Tuple, wake: boolean = true): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_ApplyLinearImpulse(bodyId, impulse[0], impulse[1], impulse[2], wake);
+    }
+
+    public applyAngularImpulse(bodyId: BodyId, impulse: Vec3Tuple, wake: boolean = true): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_ApplyAngularImpulse(bodyId, impulse[0], impulse[1], impulse[2], wake);
+    }
+
+    public castRay(origin: Vec3Tuple, translation: Vec3Tuple): RayHit | null {
+        this.checkDestroyed();
+        const hit = this.wasm._b3Glue_CastRayClosest(
+            this.worldId,
+            origin[0], origin[1], origin[2],
+            translation[0], translation[1], translation[2],
+            this.scratchPtr
+        );
+
+        if (!hit) return null;
+
+        const o = this.scratchPtr >> 2;
+        const h = this.wasm.HEAPF32;
+        return {
+            hit: true,
+            fraction: h[o + 1],
+            point: [h[o + 2], h[o + 3], h[o + 4]],
+            normal: [h[o + 5], h[o + 6], h[o + 7]],
+        };
+    }
+
+    public destroy(): void {
+        if (this.isDestroyed) return;
+        this.wasm._free(this.scratchPtr);
+        if (this.batchCapacity > 0) {
+            this.wasm._free(this.batchIdsPtr);
+            this.wasm._free(this.batchFloatsPtr);
+        }
+        this.wasm._b3Glue_DestroyWorld(this.worldId);
+        this.isDestroyed = true;
+    }
+
+    private ensureBatchCapacity(count: number): void {
+        if (count <= this.batchCapacity) return;
+
+        if (this.batchCapacity > 0) {
+            this.wasm._free(this.batchIdsPtr);
+            this.wasm._free(this.batchFloatsPtr);
+        }
+
+        this.batchCapacity = Math.max(count, 64);
+        // IDs: 8 bytes each
+        this.batchIdsPtr = this.wasm._malloc(this.batchCapacity * 8);
+        // Transforms: 7 floats (28 bytes) each
+        this.batchFloatsPtr = this.wasm._malloc(this.batchCapacity * 28);
+    }
+
+    private checkDestroyed(): void {
+        if (this.isDestroyed) {
+            throw new Error("Box3DWorld has already been destroyed.");
+        }
+    }
+}

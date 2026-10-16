@@ -1,0 +1,80 @@
+name: Build and Track Box3D Upstream
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run every Monday at 02:00 UTC to track Erin Catto's upstream updates
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Compile WASM and TypeScript
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Update Box3D Submodule (if scheduled/dispatched)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          git submodule update --remote --merge vendor/box3d
+
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+
+      - name: Verify Emscripten
+        run: emcc --version
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: latest
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install Node Dependencies
+        run: pnpm install
+
+      - name: Build WASM (SIMD, Scalar, Threads)
+        run: |
+          bash scripts/build.sh simd
+          bash scripts/build.sh scalar
+          bash scripts/build.sh threads
+
+      - name: Build TypeScript
+        run: pnpm run build:ts
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: box3d-wasm-dist
+          path: dist/
+          retention-days: 14
+
+      - name: Commit Upstream Submodule Updates
+        if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet vendor/box3d; then
+            git add vendor/box3d
+            git commit -m "chore(vendor): bump upstream box3d commit"
+            git push
+          fi

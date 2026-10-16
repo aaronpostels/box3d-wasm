@@ -1,0 +1,16 @@
+# Build outputs
+dist/
+build/
+*.wasm
+*.map
+
+# Node dependencies
+node_modules/
+.pnpm-store/
+
+# System / IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

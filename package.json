@@ -1,0 +1,45 @@
+{
+  "name": "box3d-wasm",
+  "version": "0.1.0",
+  "description": "High-performance WebAssembly build of Erin Catto's Box3D physics engine for web game engines",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./wasm": "./dist/box3d.wasm",
+    "./raw": "./dist/box3d.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "pnpm run build:wasm && pnpm run build:ts",
+    "build:wasm": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1",
+    "build:wasm:scalar": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Scalar",
+    "build:wasm:threads": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Threads",
+    "build:ts": "tsc",
+    "update:upstream": "git submodule update --remote --merge vendor/box3d"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "physics",
+    "3d",
+    "box3d",
+    "webassembly",
+    "wasm",
+    "simd",
+    "game-engine"
+  ],
+  "author": "Aaron",
+  "license": "MIT"
+}

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Box3D WebAssembly Demo</title>
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            color: #eee;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            padding: 20px;
+        }
+        #log {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            padding: 15px;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Box3D WebAssembly — Self-Compiled High Performance Demo</h1>
+    <div id="log">Loading WASM module...</div>
+
+    <script type="module">
+        import { initBox3D, Box3DWorld, BodyType } from "../dist/index.js";
+
+        const logEl = document.getElementById("log");
+        function log(msg) {
+            logEl.textContent += "\n" + msg;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        async function run() {
+            try {
+                const wasm = await initBox3D();
+                log("Box3D WebAssembly module loaded successfully.");
+
+                const world = new Box3DWorld(wasm, [0, -9.81, 0]);
+                log("World created.");
+
+                const groundId = world.createBody({ type: BodyType.Static, position: [0, -1, 0] });
+                world.createBoxShape(groundId, { halfWidth: 20, halfHeight: 1, halfDepth: 20 });
+
+                const sphereId = world.createBody({ type: BodyType.Dynamic, position: [0, 10, 0] });
+                world.createSphereShape(sphereId, { radius: 0.5, density: 1.0, restitution: 0.6 });
+
+                const bodyIds = [groundId, sphereId];
+                const transforms = new Float32Array(bodyIds.length * 7);
+
+                log("Simulating 120 steps (~2 seconds at 60 FPS):");
+                for (let i = 0; i < 120; ++i) {
+                    world.step(1 / 60, 4);
+                    world.syncBatchTransforms(bodyIds, transforms);
+                    if (i % 15 === 0) {
+                        const y = transforms[7 + 1];
+                        log(`Frame ${i.toString().padStart(3, " ")}: Sphere Height = ${y.toFixed(3)} m`);
+                    }
+                }
+
+                log("Simulation finished smoothly. Zero GC overhead.");
+            } catch (err) {
+                log("Error: " + err.message);
+                console.error(err);
+            }
+        }
+
+        run();
+    </script>
+</body>
+</html>
