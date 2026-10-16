@@ -162,8 +162,12 @@ export class Box3DWorld {
 
         // Copy body IDs into WASM heap
         const idOffset = this.batchIdsPtr >> 3;
-        for (let i = 0; i < count; ++i) {
-            this.wasm.HEAPU64[idOffset + i] = bodyIds[i];
+        if (bodyIds instanceof BigUint64Array) {
+            this.wasm.HEAPU64.set(bodyIds.subarray(0, count), idOffset);
+        } else {
+            for (let i = 0; i < count; ++i) {
+                this.wasm.HEAPU64[idOffset + i] = bodyIds[i];
+            }
         }
 
         // Native batch read
@@ -171,11 +175,6 @@ export class Box3DWorld {
 
         const floatCount = count * 7;
         const floatOffset = this.batchFloatsPtr >> 2;
-
-        if (targetBuffer) {
-            targetBuffer.set(this.wasm.HEAPF32.subarray(floatOffset, floatOffset + floatCount));
-            return targetBuffer;
-        }
 
         // Recreate or reuse cached view; handles memory growth detachment automatically
         if (
@@ -185,6 +184,11 @@ export class Box3DWorld {
             this.cachedWasmFloatView.length !== floatCount
         ) {
             this.cachedWasmFloatView = this.wasm.HEAPF32.subarray(floatOffset, floatOffset + floatCount);
+        }
+
+        if (targetBuffer) {
+            targetBuffer.set(this.cachedWasmFloatView);
+            return targetBuffer;
         }
 
         return this.cachedWasmFloatView;
