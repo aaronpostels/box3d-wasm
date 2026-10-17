@@ -9,6 +9,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+typedef struct b3Recording b3Recording;
+typedef struct b3RecPlayer b3RecPlayer;
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #define B3_GLUE_EXPORT EMSCRIPTEN_KEEPALIVE
@@ -53,6 +56,35 @@ B3_GLUE_EXPORT void b3Glue_ApplyAngularImpulse(uint64_t bodyIdRaw, float ax, flo
 
 // Raycasts
 B3_GLUE_EXPORT bool b3Glue_CastRayClosest(uint32_t worldIdRaw, float ox, float oy, float oz, float dx, float dy, float dz, float* outResult8);
+
+// Part 2 (box3d_glue_ext.c): engine-grade API
+B3_GLUE_EXPORT void b3Glue_SetGravity(uint32_t world, float gx, float gy, float gz);
+B3_GLUE_EXPORT uint64_t b3Glue_CreateBodyEx(uint32_t world, int type, const float* pose7, const float* vel6, int flags);
+B3_GLUE_EXPORT void b3Glue_GetBatchState(const uint64_t* ids, int count, float* out);
+B3_GLUE_EXPORT void b3Glue_SetTargetTransform(uint64_t body, const float* pose7, float dt);
+B3_GLUE_EXPORT float b3Glue_BodyMass(uint64_t body);
+B3_GLUE_EXPORT bool b3Glue_BodyIsAwake(uint64_t body);
+B3_GLUE_EXPORT uint64_t b3Glue_AddBox(uint64_t body, float hx, float hy, float hz, float density, float friction, float restitution, int flags);
+B3_GLUE_EXPORT uint64_t b3Glue_AddSphere(uint64_t body, float radius, float density, float friction, float restitution, int flags);
+B3_GLUE_EXPORT uint64_t b3Glue_AddCapsule(uint64_t body, float halfHeight, float radius, float density, float friction, float restitution, int flags);
+B3_GLUE_EXPORT uint64_t b3Glue_ShapeBody(uint64_t shape);
+B3_GLUE_EXPORT uint64_t b3Glue_CreateWeld(uint32_t world, uint64_t a, uint64_t b, const float* anchorA, const float* anchorB);
+B3_GLUE_EXPORT uint64_t b3Glue_CreateRevolute(uint32_t world, uint64_t a, uint64_t b, const float* anchorA, const float* anchorB, const float* axis, int limited, float lo, float hi);
+B3_GLUE_EXPORT uint64_t b3Glue_CreatePrismatic(uint32_t world, uint64_t a, uint64_t b, const float* anchorA, const float* anchorB, const float* axis, int limited, float lo, float hi);
+B3_GLUE_EXPORT int b3Glue_ContactBeginEvents(uint32_t world, uint64_t* out, int max);
+B3_GLUE_EXPORT int b3Glue_ContactEndEvents(uint32_t world, uint64_t* out, int max);
+B3_GLUE_EXPORT int b3Glue_SensorBeginEvents(uint32_t world, uint64_t* out, int max);
+B3_GLUE_EXPORT int b3Glue_SensorEndEvents(uint32_t world, uint64_t* out, int max);
+B3_GLUE_EXPORT uint64_t b3Glue_RayClosest(uint32_t world, const float* origin, const float* d, float* out7);
+B3_GLUE_EXPORT b3Recording* b3Glue_SnapshotTake(uint32_t world);
+B3_GLUE_EXPORT const uint8_t* b3Glue_SnapshotData(const b3Recording* rec);
+B3_GLUE_EXPORT int b3Glue_SnapshotSize(const b3Recording* rec);
+B3_GLUE_EXPORT void b3Glue_SnapshotFree(b3Recording* rec);
+B3_GLUE_EXPORT b3RecPlayer* b3Glue_RestoreCreate(const uint8_t* data, int size);
+B3_GLUE_EXPORT uint32_t b3Glue_RestoreWorld(b3RecPlayer* p);
+B3_GLUE_EXPORT int b3Glue_RestoreBodyCount(const b3RecPlayer* p);
+B3_GLUE_EXPORT uint64_t b3Glue_RestoreBodyId(const b3RecPlayer* p, int i);
+B3_GLUE_EXPORT void b3Glue_RestoreDestroy(b3RecPlayer* p);
 
 #ifdef __cplusplus
 }

@@ -24,7 +24,7 @@
     "build": "npm run build:wasm && npm run build:ts",
     "build:wasm": "bash scripts/build.sh simd && bash scripts/build.sh scalar && bash scripts/build.sh threads",
     "build:ts": "tsc",
-    "test": "node test/smoke.mjs",
+    "test": "node test/smoke.mjs && node test/snapshot.mjs",
     "update:upstream": "git submodule update --remote --merge vendor/box3d"
   },
   "devDependencies": {

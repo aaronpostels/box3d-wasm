@@ -27,7 +27,7 @@ LINK_FLAGS=(
     -s EXPORT_NAME=Box3DModule
     -s WASM_BIGINT=1
     -s 'EXPORTED_RUNTIME_METHODS=["HEAP8","HEAPU8","HEAP32","HEAPU32","HEAPF32","HEAP64","HEAPU64"]'
-    -s 'EXPORTED_FUNCTIONS=["_malloc","_free","_b3Glue_CreateWorld","_b3Glue_DestroyWorld","_b3Glue_Step","_b3Glue_WorldIsValid","_b3Glue_CreateBody","_b3Glue_DestroyBody","_b3Glue_BodyIsValid","_b3Glue_CreateBoxShape","_b3Glue_CreateSphereShape","_b3Glue_CreateCapsuleShape","_b3Glue_DestroyShape","_b3Glue_GetTransform","_b3Glue_SetTransform","_b3Glue_GetBatchTransforms","_b3Glue_GetLinearVelocity","_b3Glue_SetLinearVelocity","_b3Glue_GetAngularVelocity","_b3Glue_SetAngularVelocity","_b3Glue_ApplyForce","_b3Glue_ApplyLinearImpulse","_b3Glue_ApplyAngularImpulse","_b3Glue_CastRayClosest"]'
+    -s 'EXPORTED_FUNCTIONS=["_malloc","_free"]'
 )
 
 OUT_FILE="dist/box3d.js"
@@ -47,6 +47,6 @@ else
 fi
 
 echo "Compiling with emcc..."
-emcc "${C_FLAGS[@]}" vendor/box3d/src/*.c src/c/box3d_glue.c "${LINK_FLAGS[@]}" -o "$OUT_FILE"
+emcc "${C_FLAGS[@]}" vendor/box3d/src/*.c src/c/box3d_glue.c src/c/box3d_glue_ext.c "${LINK_FLAGS[@]}" -o "$OUT_FILE"
 
 echo "Build successful: $OUT_FILE"
