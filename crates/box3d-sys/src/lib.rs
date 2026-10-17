@@ -48,6 +48,8 @@ extern "C" {
     pub fn b3Glue_ShapeBody(shape: Shape) -> Body;
 
     pub fn b3Glue_JointIsValid(joint: Joint) -> bool;
+    /// Moves a capsule character by `delta3` sliding along what it meets. `pos3` is updated. Returns 1 when grounded.
+    pub fn b3Glue_MoveCharacter(world: World, self_shape: Shape, pos3: *mut f32, half_height: f32, radius: f32, delta3: *const f32, ground_normal_y: f32) -> i32;
     pub fn b3Glue_CreateWeld(world: World, a: Body, b: Body, anchor_a: *const f32, anchor_b: *const f32) -> Joint;
     pub fn b3Glue_CreateRevolute(world: World, a: Body, b: Body, anchor_a: *const f32, anchor_b: *const f32, axis: *const f32, limited: i32, lo: f32, hi: f32) -> Joint;
     pub fn b3Glue_CreatePrismatic(world: World, a: Body, b: Body, anchor_a: *const f32, anchor_b: *const f32, axis: *const f32, limited: i32, lo: f32, hi: f32) -> Joint;

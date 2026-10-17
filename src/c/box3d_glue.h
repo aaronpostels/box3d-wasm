@@ -58,6 +58,7 @@ B3_GLUE_EXPORT void b3Glue_ApplyAngularImpulse(uint64_t bodyIdRaw, float ax, flo
 B3_GLUE_EXPORT bool b3Glue_CastRayClosest(uint32_t worldIdRaw, float ox, float oy, float oz, float dx, float dy, float dz, float* outResult8);
 
 // Part 2 (box3d_glue_ext.c): engine-grade API
+B3_GLUE_EXPORT int b3Glue_MoveCharacter(uint32_t world, uint64_t selfShape, float* pos3, float halfHeight, float radius, const float* delta3, float groundNormalY);
 B3_GLUE_EXPORT bool b3Glue_JointIsValid(uint64_t joint);
 B3_GLUE_EXPORT void b3Glue_SetGravity(uint32_t world, float gx, float gy, float gz);
 B3_GLUE_EXPORT uint64_t b3Glue_CreateBodyEx(uint32_t world, int type, const float* pose7, const float* vel6, int flags);

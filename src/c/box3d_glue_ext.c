@@ -209,3 +209,65 @@ uint64_t b3Glue_RestoreBodyId(const b3RecPlayer* p, int i) { return b3StoreBodyI
 void b3Glue_RestoreDestroy(b3RecPlayer* p) { b3DestroyPlayer(p); }
 
 bool b3Glue_JointIsValid(uint64_t joint) { return b3Joint_IsValid(b3LoadJointId(joint)); }
+
+// ---- character mover ----
+// Quake-style movement with Box3D planes: gather the planes the capsule touches, solve for a position that satisfies
+// them, sweep there, repeat. The character own shape is skipped.
+
+#define GLUE_MAX_PLANES 32
+
+typedef struct {
+    b3ShapeId self;
+    b3CollisionPlane planes[GLUE_MAX_PLANES];
+    int count;
+} MoverContext;
+
+static bool collectPlanes(b3ShapeId shapeId, const b3PlaneResult* results, int n, void* ctx) {
+    MoverContext* c = (MoverContext*)ctx;
+    if (B3_ID_EQUALS(shapeId, c->self)) return true;
+    for (int i = 0; i < n && c->count < GLUE_MAX_PLANES; ++i) {
+        c->planes[c->count++] = (b3CollisionPlane){ .plane = results[i].plane, .pushLimit = 3.4e38f, .push = 0.0f, .clipVelocity = true };
+    }
+    return true;
+}
+
+static bool acceptShape(b3ShapeId shapeId, void* ctx) {
+    return !B3_ID_EQUALS(shapeId, ((MoverContext*)ctx)->self);
+}
+
+static void gather(b3WorldId w, MoverContext* c, const float* pos, const b3Capsule* cap) {
+    c->count = 0;
+    b3World_CollideMover(w, (b3Pos){ pos[0], pos[1], pos[2] }, cap, b3DefaultQueryFilter(), collectPlanes, c);
+}
+
+// pos3 is read and written. Returns 1 when the character stands on something whose normal points up at least
+// `groundNormalY` (cosine of the steepest slope), else 0.
+int b3Glue_MoveCharacter(uint32_t world, uint64_t selfShape, float* pos3, float halfHeight, float radius, const float* delta3, float groundNormalY) {
+    b3WorldId w = b3LoadWorldId(world);
+    b3Capsule cap = { .center1 = { 0, -halfHeight, 0 }, .center2 = { 0, halfHeight, 0 }, .radius = radius };
+    MoverContext c;
+    c.self = b3LoadShapeId(selfShape);
+    float target[3] = { pos3[0] + delta3[0], pos3[1] + delta3[1], pos3[2] + delta3[2] };
+
+    // Settle: with no movement the solver only pushes the capsule out of whatever it overlaps.
+    gather(w, &c, pos3, &cap);
+    if (c.count > 0) {
+        b3PlaneSolverResult s = b3SolvePlanes((b3Vec3){ 0, 0, 0 }, c.planes, c.count);
+        pos3[0] += s.delta.x; pos3[1] += s.delta.y; pos3[2] += s.delta.z;
+    }
+    for (int i = 0; i < 5; ++i) {
+        gather(w, &c, pos3, &cap);
+        b3Vec3 remaining = { target[0] - pos3[0], target[1] - pos3[1], target[2] - pos3[2] };
+        b3Vec3 step = remaining;
+        if (c.count > 0) step = b3SolvePlanes(remaining, c.planes, c.count).delta;
+        if (b3LengthSquared(step) < 1e-10f) break;
+        float fraction = b3World_CastMover(w, (b3Pos){ pos3[0], pos3[1], pos3[2] }, &cap, step, b3DefaultQueryFilter(), acceptShape, &c);
+        pos3[0] += step.x * fraction; pos3[1] += step.y * fraction; pos3[2] += step.z * fraction;
+        if (fraction >= 1.0f) break;
+    }
+    gather(w, &c, pos3, &cap);
+    for (int i = 0; i < c.count; ++i) {
+        if (c.planes[i].plane.normal.y >= groundNormalY) return 1;
+    }
+    return 0;
+}
