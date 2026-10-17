@@ -16,7 +16,7 @@ void b3Glue_SetGravity(uint32_t world, float gx, float gy, float gz) {
 
 // ---- bodies ----
 
-// flags: bit 0 sleeping allowed, bit 1 bullet (continuous against dynamic bodies).
+// flags: bit 0 sleeping allowed, bit 1 bullet (continuous against dynamic bodies), bit 2 start asleep.
 uint64_t b3Glue_CreateBodyEx(uint32_t world, int type, const float* pose7, const float* vel6, int flags) {
     b3BodyDef def = b3DefaultBodyDef();
     def.type = (b3BodyType)type;
@@ -26,6 +26,7 @@ uint64_t b3Glue_CreateBodyEx(uint32_t world, int type, const float* pose7, const
     def.angularVelocity = (b3Vec3){ vel6[3], vel6[4], vel6[5] };
     def.enableSleep = (flags & 1) != 0;
     def.isBullet = (flags & 2) != 0;
+    def.isAwake = (flags & 4) == 0; // bit 2: start asleep (a built structure that needs no settling)
     return b3StoreBodyId(b3CreateBody(b3LoadWorldId(world), &def));
 }
 

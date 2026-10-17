@@ -19,6 +19,7 @@ pub const BODY_DYNAMIC: i32 = 2;
 /// Body flags for `b3Glue_CreateBodyEx`.
 pub const BODY_ALLOW_SLEEP: i32 = 1;
 pub const BODY_BULLET: i32 = 2;
+pub const BODY_START_ASLEEP: i32 = 4;
 /// Shape flags.
 pub const SHAPE_SENSOR: i32 = 1;
 pub const SHAPE_CONTACT_EVENTS: i32 = 2;
