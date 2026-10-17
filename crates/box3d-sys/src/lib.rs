@@ -7,6 +7,13 @@
 
 use core::ffi::c_void;
 
+// One module per glue area (src/c/box3d_glue_<area>.c). Empty until each area is filled in.
+pub mod bodies;
+pub mod filters;
+pub mod joints;
+pub mod queries;
+pub mod shapes;
+
 pub type World = u32;
 pub type Body = u64;
 pub type Shape = u64;

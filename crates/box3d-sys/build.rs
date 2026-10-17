@@ -74,6 +74,9 @@ fn main() {
         platform.compile("box3d_platform");
     }
     b.file(repo.join("src/c/box3d_glue.c")).file(repo.join("src/c/box3d_glue_ext.c"));
+    for area in ["shapes", "joints", "queries", "bodies", "filters"] {
+        b.file(repo.join(format!("src/c/box3d_glue_{area}.c")));
+    }
     b.compile("box3d");
     println!("cargo:rerun-if-env-changed=CARGO_ENCODED_RUSTFLAGS");
     println!("cargo:rerun-if-changed=../../src/c");
