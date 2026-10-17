@@ -271,3 +271,14 @@ int b3Glue_MoveCharacter(uint32_t world, uint64_t selfShape, float* pos3, float 
     }
     return 0;
 }
+
+// Sets the mass and scales the inertia with it, so a body keeps its shape of resistance to turning.
+void b3Glue_SetBodyMass(uint64_t body, float mass) {
+    b3BodyId id = bodyOf(body);
+    b3MassData m = b3Body_GetMassData(id);
+    if (m.mass <= 0.0f) return;
+    float k = mass / m.mass;
+    m.mass = mass;
+    m.inertia = b3MulSM(k, m.inertia);
+    b3Body_SetMassData(id, m);
+}

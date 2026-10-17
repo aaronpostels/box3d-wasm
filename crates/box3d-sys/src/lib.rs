@@ -40,6 +40,8 @@ extern "C" {
     pub fn b3Glue_GetBatchState(ids: *const u64, count: i32, out: *mut f32);
     pub fn b3Glue_SetTargetTransform(body: Body, pose7: *const f32, dt: f32);
     pub fn b3Glue_BodyMass(body: Body) -> f32;
+    /// Sets the mass and scales the inertia with it.
+    pub fn b3Glue_SetBodyMass(body: Body, mass: f32);
     pub fn b3Glue_BodyIsAwake(body: Body) -> bool;
 
     pub fn b3Glue_AddBox(body: Body, hx: f32, hy: f32, hz: f32, density: f32, friction: f32, restitution: f32, flags: i32) -> Shape;
