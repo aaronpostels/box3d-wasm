@@ -21,7 +21,8 @@ Box3D itself is alpha. This repo tracks its `main` branch: a daily job pulls ups
 | Batch read of body state (one call for all bodies) | done |
 | Exact world snapshot and restore (continues bit for bit) | done |
 | SIMD and scalar builds give identical results | tested |
-| Hull and mesh shapes, other joint types, shape casts and overlaps, Box3D worker threads | not in the glue yet (the engine has them) |
+| Worker threads | Rust crate on a rayon pool (`use_rayon`, scales to about 8); not in the JS wrapper |
+| Hull and mesh shapes, other joint types, shape casts and overlaps | not in the glue yet (the engine has them) |
 
 ## Roadmap
 
