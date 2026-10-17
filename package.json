@@ -22,10 +22,9 @@
   ],
   "scripts": {
     "build": "pnpm run build:wasm && pnpm run build:ts",
-    "build:wasm": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1",
-    "build:wasm:scalar": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Scalar",
-    "build:wasm:threads": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Threads",
+    "build:wasm": "bash scripts/build.sh simd && bash scripts/build.sh scalar && bash scripts/build.sh threads",
     "build:ts": "tsc",
+    "test": "node test/smoke.mjs",
     "update:upstream": "git submodule update --remote --merge vendor/box3d"
   },
   "devDependencies": {

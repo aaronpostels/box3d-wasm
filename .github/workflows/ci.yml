@@ -6,8 +6,8 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Run every Monday at 02:00 UTC to track Erin Catto's upstream updates
-    - cron: '0 2 * * 1'
+    # Daily at 02:00 UTC: pull Erin Catto's upstream, build, test, commit the bump, publish a release
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 permissions:
@@ -77,6 +77,9 @@ jobs:
       - name: Build TypeScript
         run: pnpm run build:ts
 
+      - name: Smoke test (SIMD and scalar must agree)
+        run: pnpm test
+
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
@@ -99,6 +102,12 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Download Build
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: box3d-wasm-dist
+          path: dist/
+
       - name: Commit Tested Submodule Revision
         run: |
           git -C vendor/box3d checkout ${{ needs.build.outputs.submodule-sha }}
@@ -107,3 +116,10 @@ jobs:
           git add vendor/box3d
           git commit -m "chore(vendor): bump upstream box3d to ${{ needs.build.outputs.submodule-sha }}"
           git push
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHORT=$(echo "${{ needs.build.outputs.submodule-sha }}" | cut -c1-9)
+          gh release create "box3d-$SHORT" dist/*.wasm dist/box3d*.js \n            --title "Box3D $SHORT" \n            --notes "Built from erincatto/box3d@${{ needs.build.outputs.submodule-sha }}. Files: box3d (SIMD), box3d.scalar, box3d.threads."

@@ -73,7 +73,7 @@ uint64_t b3Glue_CreateBoxShape(uint64_t bodyIdRaw, float hx, float hy, float hz,
     def.baseMaterial.restitution = restitution;
 
     b3BoxHull box = b3MakeBoxHull(hx, hy, hz);
-    b3ShapeId shapeId = b3CreateHullShape(bodyId, &def, &box.hullData);
+    b3ShapeId shapeId = b3CreateHullShape(bodyId, &def, &box.base);
     return packShapeId(shapeId);
 }
 
