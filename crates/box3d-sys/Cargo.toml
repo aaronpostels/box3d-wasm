@@ -7,6 +7,13 @@ license = "MIT"
 links = "box3d"
 build = "build.rs"
 
+[dependencies]
+rayon = { version = "1", optional = true }
+
+[features]
+# use_rayon: run Box3D's parallel work on the rayon pool
+rayon = ["dep:rayon"]
+
 [build-dependencies]
 cc = "1"
 

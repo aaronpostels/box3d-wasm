@@ -23,12 +23,22 @@ pub const BODY_BULLET: i32 = 2;
 pub const SHAPE_SENSOR: i32 = 1;
 pub const SHAPE_CONTACT_EVENTS: i32 = 2;
 
+/// Starts a task and returns a handle for `TaskFinish`.
+pub type TaskEnqueue = unsafe extern "C" fn(task: unsafe extern "C" fn(*mut c_void), ctx: *mut c_void, user: *mut c_void, name: *const core::ffi::c_char) -> *mut c_void;
+/// Blocks until the task behind the handle is done.
+pub type TaskFinish = unsafe extern "C" fn(handle: *mut c_void, user: *mut c_void);
+
 extern "C" {
+    /// Gives a world a task system and a worker count (at least 2). The caller thread counts as worker 0.
+    pub fn b3Glue_SetTaskSystem(world: World, workers: i32, enqueue: TaskEnqueue, finish: TaskFinish);
+    pub fn b3Glue_WorkerCount(world: World) -> i32;
     pub fn b3Glue_CreateWorld(gx: f32, gy: f32, gz: f32, enable_sleep: i32, enable_continuous: i32) -> World;
     pub fn b3Glue_DestroyWorld(world: World);
     pub fn b3Glue_Step(world: World, dt: f32, sub_steps: i32);
     /// Turns sleeping and continuous collision on or off for a live world.
     pub fn b3Glue_Configure(world: World, sleeping: bool, continuous: bool);
+    /// Contact stiffness in Hz, damping ratio, and the fastest push-out speed in m/s.
+    pub fn b3Glue_SetContactTuning(world: World, hertz: f32, damping_ratio: f32, push_speed: f32);
     pub fn b3Glue_SetGravity(world: World, gx: f32, gy: f32, gz: f32);
 
     /// `pose7` is x y z qx qy qz qw, `vel6` is linear then angular velocity.
@@ -41,6 +51,8 @@ extern "C" {
     /// 13 floats per body: position, rotation, linear velocity, angular velocity.
     pub fn b3Glue_GetBatchState(ids: *const u64, count: i32, out: *mut f32);
     pub fn b3Glue_SetTargetTransform(body: Body, pose7: *const f32, dt: f32);
+    /// Speed (m/s) under which a body counts as at rest for sleeping.
+    pub fn b3Glue_SetSleepThreshold(body: Body, threshold: f32);
     pub fn b3Glue_BodyMass(body: Body) -> f32;
     /// Sets the mass and scales the inertia with it.
     pub fn b3Glue_SetBodyMass(body: Body, mass: f32);
@@ -76,6 +88,38 @@ extern "C" {
     pub fn b3Glue_RestoreBodyCount(player: *const c_void) -> i32;
     pub fn b3Glue_RestoreBodyId(player: *const c_void, i: i32) -> Body;
     pub fn b3Glue_RestoreDestroy(player: *mut c_void);
+}
+
+/// Runs a world's parallel work on the rayon pool. Needs a pool with at least `workers` threads (the caller steps as worker 0,
+/// the others are spawned onto the pool and spin together at the solver barriers, so each needs a free pool thread).
+#[cfg(feature = "rayon")]
+pub fn use_rayon(world: World, workers: i32) {
+    use core::sync::atomic::{AtomicBool, Ordering};
+
+    struct Job(unsafe extern "C" fn(*mut c_void), *mut c_void);
+    // The task and its context are used on one pool thread only, and the caller keeps them alive until finish returns.
+    unsafe impl Send for Job {}
+
+    unsafe extern "C" fn enqueue(task: unsafe extern "C" fn(*mut c_void), ctx: *mut c_void, _user: *mut c_void, _name: *const core::ffi::c_char) -> *mut c_void {
+        let done: &'static AtomicBool = Box::leak(Box::new(AtomicBool::new(false)));
+        let job = Job(task, ctx);
+        rayon::spawn(move || {
+            let job = job;
+            unsafe { (job.0)(job.1) };
+            done.store(true, Ordering::Release);
+        });
+        done as *const AtomicBool as *mut c_void
+    }
+
+    unsafe extern "C" fn finish(handle: *mut c_void, _user: *mut c_void) {
+        let done = &*(handle as *const AtomicBool);
+        while !done.load(Ordering::Acquire) {
+            core::hint::spin_loop();
+        }
+        drop(Box::from_raw(handle as *mut AtomicBool));
+    }
+
+    unsafe { b3Glue_SetTaskSystem(world, workers, enqueue, finish) };
 }
 
 /// The libc Box3D needs when there is none (wasm32-unknown-unknown). Allocations keep their size in a 16-byte header.

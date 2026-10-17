@@ -287,3 +287,31 @@ void b3Glue_Configure(uint32_t world, bool sleeping, bool continuous) {
     b3World_EnableSleeping(b3LoadWorldId(world), sleeping);
     b3World_EnableContinuous(b3LoadWorldId(world), continuous);
 }
+
+// Contact stiffness (Hz), damping ratio and the fastest push-out speed (m/s). Stiffer contacts make tall stacks sag less.
+void b3Glue_SetContactTuning(uint32_t world, float hertz, float dampingRatio, float pushSpeed) {
+    b3World_SetContactTuning(b3LoadWorldId(world), hertz, dampingRatio, pushSpeed);
+}
+
+// A body falls asleep when it moves slower than this (m/s) for half a second. Higher puts piles to sleep sooner.
+void b3Glue_SetSleepThreshold(uint64_t body, float threshold) {
+    b3Body_SetSleepThreshold(bodyOf(body), threshold);
+}
+
+// ---- task system ----
+// Box3D can hand its parallel work to the host: `enqueue` starts a task and returns a handle, `finish` blocks until it is done.
+// The world then splits its solver over `workers` tasks (the calling thread is worker 0). Works on any world, also a restored one.
+
+#include "physics_world.h"
+
+void b3Glue_SetTaskSystem(uint32_t world, int workers, b3EnqueueTaskCallback* enqueue, b3FinishTaskCallback* finish) {
+    b3WorldId id = b3LoadWorldId(world);
+    b3World* w = b3GetWorldFromId(id);
+    if (w == NULL || workers < 2 || enqueue == NULL || finish == NULL) return;
+    w->enqueueTaskFcn = enqueue;
+    w->finishTaskFcn = finish;
+    w->userTaskContext = NULL;
+    b3World_SetWorkerCount(id, workers);
+}
+
+int b3Glue_WorkerCount(uint32_t world) { return b3World_GetWorkerCount(b3LoadWorldId(world)); }
