@@ -34,7 +34,17 @@ fn main() {
     }
     if !wasm {
         // wasm SIMD is 4 wide; keep the host build 4 wide too, so a native test runs the same code path as the browser.
-        b.define("BOX3D_DISABLE_AVX2", None);
+        // BOX3D_NATIVE_AVX2=1 builds the 8-wide AVX2 path (for native speed measurements; the default stays 4 wide like wasm).
+        if std::env::var("BOX3D_NATIVE_AVX2").is_ok() {
+            if b.get_compiler().is_like_msvc() {
+                b.flag("/arch:AVX2");
+            } else {
+                b.flag("-mavx2");
+            }
+        } else {
+            b.define("BOX3D_DISABLE_AVX2", None);
+        }
+        println!("cargo:rerun-if-env-changed=BOX3D_NATIVE_AVX2");
     }
     if std::env::var("BOX3D_SCALAR").is_ok() {
         b.define("BOX3D_DISABLE_SIMD", None);
