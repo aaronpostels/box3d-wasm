@@ -46,39 +46,20 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Set up Emscripten
-        uses: mymindstorm/setup-emsdk@6ab5eb532922718e268a739b8bc7ccf965d5ef18 # v14
-        with:
-          version: 4.0.18
-
-      - name: Verify Emscripten
-        run: emcc --version
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@a3252b78c470c02df07e9d792dbb42340d40a0ec # v3.0.0
-        with:
-          version: 10.5.2
+      - name: Build WASM (SIMD, scalar, threads) in the Emscripten image
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src emscripten/emsdk:4.0.18 bash -c             "bash scripts/build.sh simd && bash scripts/build.sh scalar && bash scripts/build.sh threads"
 
       - name: Set up Node.js
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 22.14.0
-          cache: 'pnpm'
 
-      - name: Install Node Dependencies
-        run: pnpm install
-
-      - name: Build WASM (SIMD, Scalar, Threads)
+      - name: Build TypeScript and smoke test
         run: |
-          bash scripts/build.sh simd
-          bash scripts/build.sh scalar
-          bash scripts/build.sh threads
-
-      - name: Build TypeScript
-        run: pnpm run build:ts
-
-      - name: Smoke test (SIMD and scalar must agree)
-        run: pnpm test
+          npm install --no-package-lock
+          npm run build:ts
+          npm test
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3

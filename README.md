@@ -47,7 +47,7 @@ box3d-wasm/
 ### 1. Installation
 
 ```bash
-pnpm add box3d-wasm
+npm i github:aaronpostels/box3d-wasm
 ```
 
 ### 2. Basic Engine Loop
@@ -115,7 +115,7 @@ function gameLoop(dt: number) {
 ### Full Build (WASM + TypeScript)
 
 ```bash
-pnpm run build
+npm run build
 ```
 
 ---
@@ -125,8 +125,8 @@ pnpm run build
 To pull the latest commits from Erin Catto's upstream repository locally:
 
 ```bash
-pnpm run update:upstream
-pnpm run build
+npm run update:upstream
+npm run build
 ```
 
 In GitHub, the included workflow (`.github/workflows/ci.yml`) automatically checks for new Box3D commits every Monday and produces freshly compiled release artifacts.
