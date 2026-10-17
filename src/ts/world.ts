@@ -162,10 +162,16 @@ export class Box3DWorld {
      * Output format per body: 7 floats [px, py, pz, qx, qy, qz, qw].
      *
      * @param bodyIds Array or BigUint64Array of bodies to query.
+     *        If this is a view on the WASM heap, create it after reserveBatchCapacity() and recreate it after heap growth.
      * @param targetBuffer Optional preallocated Float32Array to write into.
      *        - For guaranteed 0 allocations (even when body count fluctuates), pass an external Float32Array.
-     *        - If passing a view on the WASM heap, call reserveBatchCapacity() upfront so heap growth does not detach it.
-     *        - If omitted, returns a direct view into WASM memory (zero-allocation when body count is constant).
+     *        - Only the first bodyIds.length * 7 entries contain current transforms; larger buffers may have a stale tail.
+     *        - If passing a view on the WASM heap, call reserveBatchCapacity() first and create the view afterward.
+     *          This prevents this method's batch-buffer allocation from growing memory. Other WASM allocations can
+     *          still grow memory and invalidate non-shared heap views; recreate those views after any such growth.
+     *        - If omitted, returns a capacity-sized direct view into WASM memory; only the first bodyIds.length * 7
+     *          entries are current. It avoids allocations while batch capacity and WASM memory remain unchanged.
+     *          A later sync overwrites it, and non-shared heap growth can detach it; copy it if retaining the data.
      */
     public syncBatchTransforms(bodyIds: BodyId[] | BigUint64Array, targetBuffer?: Float32Array): Float32Array {
         this.checkDestroyed();
@@ -180,6 +186,15 @@ export class Box3DWorld {
         }
 
         this.ensureBatchCapacity(count);
+        // Reserving buffers may grow non-shared WASM memory and detach a heap-backed target view.
+        if (targetBuffer && targetBuffer.length < floatCount) {
+            throw new RangeError(
+                `Box3DWorld.syncBatchTransforms: targetBuffer length (${targetBuffer.length}) is smaller than required float count (${floatCount}).`
+            );
+        }
+        if (bodyIds instanceof BigUint64Array && bodyIds.length !== count) {
+            throw new RangeError("Box3DWorld.syncBatchTransforms: bodyIds view was detached during batch reservation; recreate it after reserving capacity.");
+        }
 
         // Copy body IDs into WASM heap
         const idOffset = this.batchIdsPtr >>> 3;
@@ -197,10 +212,15 @@ export class Box3DWorld {
         const floatOffset = this.batchFloatsPtr >>> 2;
 
         if (targetBuffer) {
+            // Keep the copy safe if the native call caused memory growth and detached the target view.
+            if (targetBuffer.length < floatCount) {
+                throw new RangeError(
+                    `Box3DWorld.syncBatchTransforms: targetBuffer length (${targetBuffer.length}) is smaller than required float count (${floatCount}).`
+                );
+            }
             const h = this.wasm.HEAPF32;
-            // Handle possible overlapping memory if targetBuffer is also a view on WASM heap
+            // Reverse only when the destination starts inside the source range; this is safe for separate buffers too.
             if (
-                targetBuffer.buffer === h.buffer &&
                 targetBuffer.byteOffset > this.batchFloatsPtr &&
                 targetBuffer.byteOffset < this.batchFloatsPtr + floatCount * 4
             ) {
@@ -215,22 +235,26 @@ export class Box3DWorld {
             return targetBuffer;
         }
 
-        // Return direct view without allocating when floatCount remains constant
+        // Reuse the full-capacity view so count changes within this capacity do not allocate.
         if (
             !this.cachedWasmFloatView ||
             this.cachedWasmFloatView.buffer.byteLength === 0 ||
-            this.cachedWasmFloatView.byteOffset !== this.batchFloatsPtr ||
-            this.cachedWasmFloatView.length !== floatCount
+            this.cachedWasmFloatView.byteOffset !== this.batchFloatsPtr
         ) {
-            this.cachedWasmFloatView = this.wasm.HEAPF32.subarray(floatOffset, floatOffset + floatCount);
+            this.cachedWasmFloatView = this.wasm.HEAPF32.subarray(
+                floatOffset,
+                floatOffset + this.batchCapacity * 7
+            );
         }
 
         return this.cachedWasmFloatView;
     }
 
     /**
-     * Pre-reserves batch memory for at least the given body count.
-     * Call this when using heap-backed target buffers to prevent WASM heap reallocation detachment.
+     * Pre-reserves internal batch memory for at least the given integer body count.
+     * When using a target view on the WASM heap, call this before creating that view so batch-buffer allocation
+     * does not grow memory during syncBatchTransforms. Other WASM allocations may still grow memory and invalidate
+     * non-shared heap views.
      */
     public reserveBatchCapacity(capacity: number): void {
         this.checkDestroyed();
@@ -339,7 +363,7 @@ export class Box3DWorld {
     }
 
     private ensureBatchCapacity(count: number): void {
-        if (count < 0 || count > Box3DWorld.MAX_BATCH_COUNT) {
+        if (!Number.isSafeInteger(count) || count < 0 || count > Box3DWorld.MAX_BATCH_COUNT) {
             throw new RangeError(`Box3DWorld: batch count ${count} is out of bounds (max ${Box3DWorld.MAX_BATCH_COUNT}).`);
         }
         if (count <= this.batchCapacity) return;
