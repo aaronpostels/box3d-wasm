@@ -188,22 +188,28 @@ export class Box3DWorld {
         const floatCount = count * 7;
         const floatOffset = this.batchFloatsPtr >>> 2;
 
-        // Recreate or reuse cached view; handles memory growth detachment automatically
-        if (
-            !this.cachedWasmFloatView ||
-            this.cachedWasmFloatView.buffer.byteLength === 0 ||
-            this.cachedWasmFloatView.byteOffset !== this.batchFloatsPtr ||
-            this.cachedWasmFloatView.length !== floatCount
-        ) {
-            this.cachedWasmFloatView = this.wasm.HEAPF32.subarray(floatOffset, floatOffset + floatCount);
-        }
-
         if (targetBuffer) {
-            targetBuffer.set(this.cachedWasmFloatView);
+            // Direct copy loop over HEAPF32: 0 TypedArray view allocations even if count fluctuates every frame
+            const h = this.wasm.HEAPF32;
+            for (let i = 0; i < floatCount; ++i) {
+                targetBuffer[i] = h[floatOffset + i];
+            }
             return targetBuffer;
         }
 
-        return this.cachedWasmFloatView;
+        // Fallback when no targetBuffer provided: maintain capacity view
+        if (
+            !this.cachedWasmFloatView ||
+            this.cachedWasmFloatView.buffer.byteLength === 0 ||
+            this.cachedWasmFloatView.byteOffset !== this.batchFloatsPtr
+        ) {
+            this.cachedWasmFloatView = this.wasm.HEAPF32.subarray(
+                floatOffset,
+                floatOffset + this.batchCapacity * 7
+            );
+        }
+
+        return this.cachedWasmFloatView.subarray(0, floatCount);
     }
 
     public setLinearVelocity(bodyId: BodyId, v: Vec3Tuple): void {
