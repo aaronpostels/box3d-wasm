@@ -28,9 +28,11 @@ static inline uint64_t packShapeId(b3ShapeId id) {
     return b3StoreShapeId(id);
 }
 
-uint32_t b3Glue_CreateWorld(float gx, float gy, float gz) {
+uint32_t b3Glue_CreateWorld(float gx, float gy, float gz, int enableSleep, int enableContinuous) {
     b3WorldDef def = b3DefaultWorldDef();
     def.gravity = (b3Vec3){ gx, gy, gz };
+    def.enableSleep = enableSleep != 0;
+    def.enableContinuous = enableContinuous != 0;
     b3WorldId worldId = b3CreateWorld(&def);
     return packWorldId(worldId);
 }

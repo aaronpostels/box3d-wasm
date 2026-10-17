@@ -21,7 +21,7 @@ extern "C" {
 #endif
 
 // World Management
-B3_GLUE_EXPORT uint32_t b3Glue_CreateWorld(float gx, float gy, float gz);
+B3_GLUE_EXPORT uint32_t b3Glue_CreateWorld(float gx, float gy, float gz, int enableSleep, int enableContinuous);
 B3_GLUE_EXPORT void b3Glue_DestroyWorld(uint32_t worldIdRaw);
 B3_GLUE_EXPORT void b3Glue_Step(uint32_t worldIdRaw, float timeStep, int subStepCount);
 B3_GLUE_EXPORT bool b3Glue_WorldIsValid(uint32_t worldIdRaw);

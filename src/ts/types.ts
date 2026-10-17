@@ -63,7 +63,7 @@ export interface RawBox3DModule {
     _malloc(bytes: number): number;
     _free(ptr: number): void;
 
-    _b3Glue_CreateWorld(gx: number, gy: number, gz: number): number;
+    _b3Glue_CreateWorld(gx: number, gy: number, gz: number, enableSleep: number, enableContinuous: number): number;
     _b3Glue_DestroyWorld(worldId: number): void;
     _b3Glue_Step(worldId: number, timeStep: number, subStepCount: number): void;
     _b3Glue_WorldIsValid(worldId: number): number;

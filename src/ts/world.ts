@@ -32,9 +32,9 @@ export class Box3DWorld {
     private batchCapacity = 0;
     private cachedWasmFloatView: Float32Array | null = null;
 
-    constructor(wasm: RawBox3DModule, gravity: Vec3Tuple = [0, -9.81, 0]) {
+    constructor(wasm: RawBox3DModule, gravity: Vec3Tuple = [0, -9.81, 0], options: { sleep?: boolean; continuous?: boolean } = {}) {
         this.wasm = wasm;
-        this.worldId = wasm._b3Glue_CreateWorld(gravity[0], gravity[1], gravity[2]);
+        this.worldId = wasm._b3Glue_CreateWorld(gravity[0], gravity[1], gravity[2], (options.sleep ?? true) ? 1 : 0, (options.continuous ?? true) ? 1 : 0);
         if (wasm._b3Glue_WorldIsValid(this.worldId) === 0) {
             throw new Error("Box3DWorld: failed to create simulation world (maximum world count exceeded or invalid configuration).");
         }
