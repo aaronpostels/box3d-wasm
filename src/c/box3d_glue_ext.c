@@ -282,3 +282,8 @@ void b3Glue_SetBodyMass(uint64_t body, float mass) {
     m.inertia = b3MulSM(k, m.inertia);
     b3Body_SetMassData(id, m);
 }
+
+void b3Glue_Configure(uint32_t world, bool sleeping, bool continuous) {
+    b3World_EnableSleeping(b3LoadWorldId(world), sleeping);
+    b3World_EnableContinuous(b3LoadWorldId(world), continuous);
+}

@@ -27,6 +27,8 @@ extern "C" {
     pub fn b3Glue_CreateWorld(gx: f32, gy: f32, gz: f32, enable_sleep: i32, enable_continuous: i32) -> World;
     pub fn b3Glue_DestroyWorld(world: World);
     pub fn b3Glue_Step(world: World, dt: f32, sub_steps: i32);
+    /// Turns sleeping and continuous collision on or off for a live world.
+    pub fn b3Glue_Configure(world: World, sleeping: bool, continuous: bool);
     pub fn b3Glue_SetGravity(world: World, gx: f32, gy: f32, gz: f32);
 
     /// `pose7` is x y z qx qy qz qw, `vel6` is linear then angular velocity.
