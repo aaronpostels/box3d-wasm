@@ -268,7 +268,10 @@ export class Box3DWorld {
             this.scratchPtr
         ) !== 0;
 
-        if (!hit) return null;
+        if (!hit) {
+            if (outHit) outHit.hit = false;
+            return null;
+        }
 
         const o = this.scratchPtr >>> 2;
         const h = this.wasm.HEAPF32;
@@ -310,7 +313,9 @@ export class Box3DWorld {
         }
         if (count <= this.batchCapacity) return;
 
-        const newCapacity = Math.max(count, 64);
+        // Geometric growth (1.5x) with minimum 64 to eliminate allocator churn on incremental additions
+        const geometricTarget = Math.ceil(this.batchCapacity * 1.5);
+        const newCapacity = Math.min(Box3DWorld.MAX_BATCH_COUNT, Math.max(count, geometricTarget, 64));
         const newIdsPtr = this.wasm._malloc(newCapacity * 8);
         const newFloatsPtr = this.wasm._malloc(newCapacity * 28);
 
