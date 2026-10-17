@@ -122,4 +122,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           SHORT=$(echo "${{ needs.build.outputs.submodule-sha }}" | cut -c1-9)
-          gh release create "box3d-$SHORT" dist/*.wasm dist/box3d*.js \n            --title "Box3D $SHORT" \n            --notes "Built from erincatto/box3d@${{ needs.build.outputs.submodule-sha }}. Files: box3d (SIMD), box3d.scalar, box3d.threads."
+          gh release create "box3d-$SHORT" dist/*.wasm dist/box3d*.js \
+            --title "Box3D $SHORT" \
+            --notes "Built from erincatto/box3d@${{ needs.build.outputs.submodule-sha }}. Files: box3d (SIMD), box3d.scalar, box3d.threads."
