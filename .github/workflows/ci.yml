@@ -69,9 +69,32 @@ jobs:
           path: dist/
           retention-days: 14
 
+  rust:
+    name: Rust crate on wasm32-unknown-unknown
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          submodules: recursive
+
+      - name: Add the wasm target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Build and run the smoke module
+        env:
+          CC_wasm32_unknown_unknown: clang
+          AR_wasm32_unknown_unknown: llvm-ar
+        run: |
+          cd crates/box3d-smoke
+          cargo build --target wasm32-unknown-unknown --release
+          node run.mjs
+
   update-upstream:
     name: Commit Upstream Submodule Updates
-    needs: build
+    needs: [build, rust]
     if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.build.outputs.submodule-changed == 'true'
     runs-on: ubuntu-latest
     permissions:

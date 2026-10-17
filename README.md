@@ -15,6 +15,16 @@ This implementation is built on three core design principles:
 
 ---
 
+## Use from Rust (game engines)
+
+`crates/box3d-sys` compiles Box3D with clang for `wasm32-unknown-unknown` (and for the host), so a Rust engine links it into its own wasm module: no JS in the loop, no imports. It carries a tiny libc and maps Box3D SSE2 code to WASM SIMD.
+
+```toml
+box3d-sys = { git = "https://github.com/aaronpostels/box3d-wasm", rev = "<commit>" }
+```
+
+Needs `clang` with the wasm32 target on PATH (`CC_wasm32_unknown_unknown=clang`). The API is flat (ids are integers, data moves in float buffers): bodies, box, sphere and capsule shapes, weld, revolute and prismatic joints, contact and sensor events, ray cast, a capsule character mover, batch state read, and an exact world snapshot and restore. `crates/box3d-smoke` is the end-to-end check CI runs.
+
 ## Architecture
 
 ```text
