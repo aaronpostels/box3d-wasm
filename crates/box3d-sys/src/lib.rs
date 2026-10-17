@@ -94,13 +94,21 @@ extern "C" {
 /// Runs a world's parallel work on the rayon pool. Needs a pool with at least `workers` threads (the caller steps as worker 0,
 /// the others are spawned onto the pool and spin together at the solver barriers, so each needs a free pool thread).
 #[cfg(feature = "rayon")]
-static TASKS: [core::sync::atomic::AtomicU32; 6] = [const { core::sync::atomic::AtomicU32::new(0) }; 6];
+static TASKS: [core::sync::atomic::AtomicU32; 10] = [const { core::sync::atomic::AtomicU32::new(0) }; 10];
 
-/// Counters of the rayon task system: tasks enqueued, started on a pool thread, finished. For debugging a stall.
+/// What a task handle points at: a done flag and the first bytes of its name, for stall reports.
 #[cfg(feature = "rayon")]
-pub fn task_stats() -> [u32; 6] {
+struct TaskSlot {
+    done: core::sync::atomic::AtomicBool,
+    name: [u8; 16],
+}
+
+/// Counters of the rayon task system: tasks enqueued, started on a pool thread, finished; then, if a `finish` ever stalled,
+/// the same three at that moment and the first 16 bytes of the stalled task's name (as four little-endian words).
+#[cfg(feature = "rayon")]
+pub fn task_stats() -> [u32; 10] {
     use core::sync::atomic::Ordering::Relaxed;
-    [TASKS[0].load(Relaxed), TASKS[1].load(Relaxed), TASKS[2].load(Relaxed), TASKS[3].load(Relaxed), TASKS[4].load(Relaxed), TASKS[5].load(Relaxed)]
+    core::array::from_fn(|i| TASKS[i].load(Relaxed))
 }
 
 #[cfg(feature = "rayon")]
@@ -112,7 +120,18 @@ pub fn use_rayon(world: World, workers: i32) {
     unsafe impl Send for Job {}
 
     unsafe extern "C" fn enqueue(task: unsafe extern "C" fn(*mut c_void), ctx: *mut c_void, _user: *mut c_void, _name: *const core::ffi::c_char) -> *mut c_void {
-        let done: &'static AtomicBool = Box::leak(Box::new(AtomicBool::new(false)));
+        let mut name = [0u8; 16];
+        if !_name.is_null() {
+            for (i, slot) in name.iter_mut().enumerate().take(15) {
+                let c = unsafe { *(_name as *const u8).add(i) };
+                if c == 0 {
+                    break;
+                }
+                *slot = c;
+            }
+        }
+        let slot: &'static TaskSlot = Box::leak(Box::new(TaskSlot { done: AtomicBool::new(false), name }));
+        let done = &slot.done;
         let job = Job(task, ctx);
         TASKS[0].fetch_add(1, Ordering::Relaxed);
         rayon::spawn(move || {
@@ -122,11 +141,12 @@ pub fn use_rayon(world: World, workers: i32) {
             TASKS[2].fetch_add(1, Ordering::Relaxed);
             done.store(true, Ordering::Release);
         });
-        done as *const AtomicBool as *mut c_void
+        slot as *const TaskSlot as *mut c_void
     }
 
     unsafe extern "C" fn finish(handle: *mut c_void, _user: *mut c_void) {
-        let done = &*(handle as *const AtomicBool);
+        let slot = &*(handle as *const TaskSlot);
+        let done = &slot.done;
         let mut spins = 0u64;
         while !done.load(Ordering::Acquire) {
             core::hint::spin_loop();
@@ -136,13 +156,16 @@ pub fn use_rayon(world: World, workers: i32) {
                 TASKS[3].store(TASKS[0].load(Ordering::Relaxed), Ordering::Relaxed);
                 TASKS[4].store(TASKS[1].load(Ordering::Relaxed), Ordering::Relaxed);
                 TASKS[5].store(TASKS[2].load(Ordering::Relaxed), Ordering::Relaxed);
+                for k in 0..4 {
+                    TASKS[6 + k].store(u32::from_le_bytes([slot.name[4 * k], slot.name[4 * k + 1], slot.name[4 * k + 2], slot.name[4 * k + 3]]), Ordering::Relaxed);
+                }
                 #[cfg(target_arch = "wasm32")]
                 core::arch::wasm32::unreachable();
                 #[cfg(not(target_arch = "wasm32"))]
                 panic!("box3d task stalled");
             }
         }
-        drop(Box::from_raw(handle as *mut AtomicBool));
+        drop(Box::from_raw(handle as *mut TaskSlot));
     }
 
     unsafe { b3Glue_SetTaskSystem(world, workers, enqueue, finish) };

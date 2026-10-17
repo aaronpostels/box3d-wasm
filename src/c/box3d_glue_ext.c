@@ -316,3 +316,4 @@ void b3Glue_SetTaskSystem(uint32_t world, int workers, b3EnqueueTaskCallback* en
 }
 
 int b3Glue_WorkerCount(uint32_t world) { return b3World_GetWorkerCount(b3LoadWorldId(world)); }
+
