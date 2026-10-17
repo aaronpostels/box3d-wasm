@@ -37,11 +37,23 @@ fn main() {
     if std::env::var("BOX3D_SCALAR").is_ok() {
         b.define("BOX3D_DISABLE_SIMD", None);
     }
+    // Real locks for wasm threads: same flags, compiled apart, because the main build renames the symbols they replace.
+    let mut platform = b.clone();
     for entry in std::fs::read_dir(box3d.join("src")).unwrap() {
         let p = entry.unwrap().path();
         if p.extension().map_or(false, |e| e == "c") {
             b.file(p);
         }
+    }
+    if wasm {
+        // timer.c has Box3D's fallback for an unknown platform: locks that do nothing. Rename them there and bring real ones
+        // (src/platform.c), or workers on a thread pool race.
+        for name in ["CreateMutex", "DestroyMutex", "LockMutex", "UnlockMutex", "CreateSemaphore", "DestroySemaphore", "WaitSemaphore", "SignalSemaphore"] {
+            let renamed = format!("b3{name}Unused");
+            b.define(&format!("b3{name}"), Some(renamed.as_str()));
+        }
+        platform.file(here.join("src/platform.c"));
+        platform.compile("box3d_platform");
     }
     b.file(repo.join("src/c/box3d_glue.c")).file(repo.join("src/c/box3d_glue_ext.c"));
     b.compile("box3d");

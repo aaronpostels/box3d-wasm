@@ -94,6 +94,16 @@ extern "C" {
 /// Runs a world's parallel work on the rayon pool. Needs a pool with at least `workers` threads (the caller steps as worker 0,
 /// the others are spawned onto the pool and spin together at the solver barriers, so each needs a free pool thread).
 #[cfg(feature = "rayon")]
+static TASKS: [core::sync::atomic::AtomicU32; 6] = [const { core::sync::atomic::AtomicU32::new(0) }; 6];
+
+/// Counters of the rayon task system: tasks enqueued, started on a pool thread, finished. For debugging a stall.
+#[cfg(feature = "rayon")]
+pub fn task_stats() -> [u32; 6] {
+    use core::sync::atomic::Ordering::Relaxed;
+    [TASKS[0].load(Relaxed), TASKS[1].load(Relaxed), TASKS[2].load(Relaxed), TASKS[3].load(Relaxed), TASKS[4].load(Relaxed), TASKS[5].load(Relaxed)]
+}
+
+#[cfg(feature = "rayon")]
 pub fn use_rayon(world: World, workers: i32) {
     use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -104,9 +114,12 @@ pub fn use_rayon(world: World, workers: i32) {
     unsafe extern "C" fn enqueue(task: unsafe extern "C" fn(*mut c_void), ctx: *mut c_void, _user: *mut c_void, _name: *const core::ffi::c_char) -> *mut c_void {
         let done: &'static AtomicBool = Box::leak(Box::new(AtomicBool::new(false)));
         let job = Job(task, ctx);
+        TASKS[0].fetch_add(1, Ordering::Relaxed);
         rayon::spawn(move || {
             let job = job;
+            TASKS[1].fetch_add(1, Ordering::Relaxed);
             unsafe { (job.0)(job.1) };
+            TASKS[2].fetch_add(1, Ordering::Relaxed);
             done.store(true, Ordering::Release);
         });
         done as *const AtomicBool as *mut c_void
@@ -114,8 +127,20 @@ pub fn use_rayon(world: World, workers: i32) {
 
     unsafe extern "C" fn finish(handle: *mut c_void, _user: *mut c_void) {
         let done = &*(handle as *const AtomicBool);
+        let mut spins = 0u64;
         while !done.load(Ordering::Acquire) {
             core::hint::spin_loop();
+            spins += 1;
+            if spins > 400_000_000 {
+                // A stall: remember what the counters said at that moment, then trap, so the page can read `task_stats`.
+                TASKS[3].store(TASKS[0].load(Ordering::Relaxed), Ordering::Relaxed);
+                TASKS[4].store(TASKS[1].load(Ordering::Relaxed), Ordering::Relaxed);
+                TASKS[5].store(TASKS[2].load(Ordering::Relaxed), Ordering::Relaxed);
+                #[cfg(target_arch = "wasm32")]
+                core::arch::wasm32::unreachable();
+                #[cfg(not(target_arch = "wasm32"))]
+                panic!("box3d task stalled");
+            }
         }
         drop(Box::from_raw(handle as *mut AtomicBool));
     }
