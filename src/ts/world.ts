@@ -189,27 +189,40 @@ export class Box3DWorld {
         const floatOffset = this.batchFloatsPtr >>> 2;
 
         if (targetBuffer) {
-            // Direct copy loop over HEAPF32: 0 TypedArray view allocations even if count fluctuates every frame
+            if (targetBuffer.length < floatCount) {
+                throw new RangeError(
+                    `Box3DWorld.syncBatchTransforms: targetBuffer length (${targetBuffer.length}) is smaller than required float count (${floatCount}).`
+                );
+            }
             const h = this.wasm.HEAPF32;
-            for (let i = 0; i < floatCount; ++i) {
-                targetBuffer[i] = h[floatOffset + i];
+            // Handle possible overlapping memory if targetBuffer is also a view on WASM heap
+            if (
+                targetBuffer.buffer === h.buffer &&
+                targetBuffer.byteOffset > this.batchFloatsPtr &&
+                targetBuffer.byteOffset < this.batchFloatsPtr + floatCount * 4
+            ) {
+                for (let i = floatCount - 1; i >= 0; --i) {
+                    targetBuffer[i] = h[floatOffset + i];
+                }
+            } else {
+                for (let i = 0; i < floatCount; ++i) {
+                    targetBuffer[i] = h[floatOffset + i];
+                }
             }
             return targetBuffer;
         }
 
-        // Fallback when no targetBuffer provided: maintain capacity view
+        // Return direct view without allocating when floatCount remains constant
         if (
             !this.cachedWasmFloatView ||
             this.cachedWasmFloatView.buffer.byteLength === 0 ||
-            this.cachedWasmFloatView.byteOffset !== this.batchFloatsPtr
+            this.cachedWasmFloatView.byteOffset !== this.batchFloatsPtr ||
+            this.cachedWasmFloatView.length !== floatCount
         ) {
-            this.cachedWasmFloatView = this.wasm.HEAPF32.subarray(
-                floatOffset,
-                floatOffset + this.batchCapacity * 7
-            );
+            this.cachedWasmFloatView = this.wasm.HEAPF32.subarray(floatOffset, floatOffset + floatCount);
         }
 
-        return this.cachedWasmFloatView.subarray(0, floatCount);
+        return this.cachedWasmFloatView;
     }
 
     public setLinearVelocity(bodyId: BodyId, v: Vec3Tuple): void {
