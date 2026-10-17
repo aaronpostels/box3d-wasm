@@ -94,7 +94,7 @@ jobs:
 
   update-upstream:
     name: Commit Upstream Submodule Updates
-    needs: [build, rust]
+    needs: build
     if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.build.outputs.submodule-changed == 'true'
     runs-on: ubuntu-latest
     permissions:
