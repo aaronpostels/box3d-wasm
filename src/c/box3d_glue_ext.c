@@ -207,3 +207,5 @@ uint32_t b3Glue_RestoreWorld(b3RecPlayer* p) { return b3StoreWorldId(b3RecPlayer
 int b3Glue_RestoreBodyCount(const b3RecPlayer* p) { return b3RecPlayer_GetBodyCount(p); }
 uint64_t b3Glue_RestoreBodyId(const b3RecPlayer* p, int i) { return b3StoreBodyId(b3RecPlayer_GetBodyId(p, i)); }
 void b3Glue_RestoreDestroy(b3RecPlayer* p) { b3DestroyPlayer(p); }
+
+bool b3Glue_JointIsValid(uint64_t joint) { return b3Joint_IsValid(b3LoadJointId(joint)); }
