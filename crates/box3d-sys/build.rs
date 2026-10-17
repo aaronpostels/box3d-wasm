@@ -24,6 +24,11 @@ fn main() {
         // libc headers last-resort first: our shims must win over any host headers clang might find.
         b.flag("-nostdlibinc").include(here.join("include/libc")).include(here.join("include/sse"));
         b.file(here.join("src/shim.c"));
+        // A module linked with --shared-memory (threads) wants every object built with atomics and bulk memory.
+        let flags = std::env::var("CARGO_ENCODED_RUSTFLAGS").unwrap_or_default();
+        if flags.contains("+atomics") {
+            b.flag("-matomics").flag("-mbulk-memory");
+        }
     }
     if !wasm {
         // wasm SIMD is 4 wide; keep the host build 4 wide too, so a native test runs the same code path as the browser.
@@ -40,6 +45,7 @@ fn main() {
     }
     b.file(repo.join("src/c/box3d_glue.c")).file(repo.join("src/c/box3d_glue_ext.c"));
     b.compile("box3d");
+    println!("cargo:rerun-if-env-changed=CARGO_ENCODED_RUSTFLAGS");
     println!("cargo:rerun-if-changed=../../src/c");
     println!("cargo:rerun-if-changed=src/shim.c");
     println!("cargo:rerun-if-changed=../../vendor/box3d/src");
