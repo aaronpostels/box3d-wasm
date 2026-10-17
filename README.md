@@ -23,6 +23,13 @@ Box3D itself is alpha. This repo tracks its `main` branch: a daily job pulls ups
 | SIMD and scalar builds give identical results | tested |
 | Hull and mesh shapes, other joint types, shape casts and overlaps, Box3D worker threads | not in the glue yet (the engine has them) |
 
+## Roadmap
+
+Wanted next (Artisan, the first user, tracks this in its own list):
+- Glue: hull, mesh, compound and heightfield shapes; spherical, distance, wheel and motor joints; shape casts and overlaps; collision filters; moved-body events in one buffer; damping, gravity scale, motion locks, user data.
+- TypeScript wrapper methods for the newer glue calls (they are typed, not wrapped).
+- The daily upstream bump and release have not run on a real upstream change yet; npm publish; a test for the Emscripten threads build.
+
 ## JS / TS
 
 ```bash
