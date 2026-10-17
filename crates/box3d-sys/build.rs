@@ -21,6 +21,8 @@ fn main() {
     }
     if wasm {
         b.flag("-ffreestanding").flag("-msimd128").define("__SSE__", "1").define("__SSE2__", "1");
+        // Box3D picks its SIMD path from __EMSCRIPTEN__; this build has none, so say "wasm" by hand (without it the solver is scalar).
+        b.define("B3_CPU_WASM", None);
         // libc headers last-resort first: our shims must win over any host headers clang might find.
         b.flag("-nostdlibinc").include(here.join("include/libc")).include(here.join("include/sse"));
         b.file(here.join("src/shim.c"));

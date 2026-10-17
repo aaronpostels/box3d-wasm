@@ -30,3 +30,12 @@ float logf(float x);
 #define isinf(x) __builtin_isinf(x)
 #define isfinite(x) __builtin_isfinite(x)
 #define M_PI 3.14159265358979323846
+// Rounding to integer: the WASM intrinsics headers call these. They lower to wasm instructions, no library call.
+#define lrint __builtin_lrint
+#define lrintf __builtin_lrintf
+#define llrint __builtin_llrint
+#define llrintf __builtin_llrintf
+#define rint __builtin_rint
+#define rintf __builtin_rintf
+#define nearbyint __builtin_nearbyint
+#define nearbyintf __builtin_nearbyintf
