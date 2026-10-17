@@ -49,6 +49,7 @@ jobs:
       - name: Build WASM (SIMD, scalar, threads) in the Emscripten image
         run: |
           docker run --rm -v "$PWD:/src" -w /src emscripten/emsdk:4.0.18 bash -c             "bash scripts/build.sh simd && bash scripts/build.sh scalar && bash scripts/build.sh threads"
+          sudo chown -R "$USER" dist
 
       - name: Set up Node.js
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
