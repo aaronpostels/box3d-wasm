@@ -1,0 +1,15 @@
+[package]
+name = "box3d-smoke"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+box3d-sys = { path = "../box3d-sys" }
+
+[profile.release]
+opt-level = 3
+lto = true

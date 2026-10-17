@@ -1,0 +1,14 @@
+[package]
+name = "box3d-sys"
+version = "0.1.0"
+edition = "2021"
+description = "Box3D (Erin Catto) compiled from C for wasm32-unknown-unknown, with a flat C glue API"
+license = "MIT"
+links = "box3d"
+build = "build.rs"
+
+[build-dependencies]
+cc = "1"
+
+[lib]
+path = "src/lib.rs"
