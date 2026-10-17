@@ -1,149 +1,81 @@
 # box3d-wasm
 
-High-performance, zero-overhead WebAssembly compilation of Erin Catto's [Box3D](https://github.com/erincatto/box3d) (portable C17 3D rigid-body physics engine) tailored for web-based game engines.
+[Box3D](https://github.com/erincatto/box3d) (Erin Catto's C17 3D physics engine) compiled to WebAssembly, rebuilt automatically whenever upstream changes.
 
----
+Two ways to use it:
 
-## Why this build?
+| | For | What you get |
+|---|---|---|
+| **JS / TS** | web apps, any JS engine | `dist/box3d.wasm` (SIMD), a scalar build, a threaded build, and a small TypeScript wrapper |
+| **Rust** | Rust engines that target the browser | crate `box3d-sys`: Box3D linked into your own `wasm32-unknown-unknown` module, no JS in the loop, no imports |
 
-Existing community wrappers (such as `monteslu/box3d-wasm`) use Emscripten's **Embind**, which creates JavaScript wrapper objects, increases garbage collection pressure every frame, and pins outdated commits.
+Box3D itself is alpha. This repo tracks its `main` branch: a daily job pulls upstream, builds, runs the tests, commits the new submodule revision and publishes a release. If upstream changes something that breaks the glue, the build goes red and the last good release stays.
 
-This implementation is built on three core design principles:
-1. **Zero-GC Batch Synchronizations**: Object transforms (`[px, py, pz, qx, qy, qz, qw]`) are written into a contiguous native memory buffer in WASM memory (`HEAPF32`). Your game engine updates all entity transforms or WebGL/WebGPU instance buffers in one bulk operation with 0 object allocations.
-2. **Native 128-bit SIMD**: Emscripten translates Box3D's SSE2 wide contact solver directly into WASM SIMD (`-msimd128 -msse2`).
-3. **Automated Upstream Tracking**: Tracks `erincatto/box3d` as a git submodule with automated GitHub Actions CI checking for and building upstream commits on a weekly schedule.
+## Status
 
----
+| Area | State |
+|---|---|
+| Bodies (static, kinematic, dynamic), box / sphere / capsule shapes | done |
+| Weld, revolute, prismatic joints | done |
+| Contact and sensor events, ray cast, character mover (capsule) | done |
+| Batch read of body state (one call for all bodies) | done |
+| Exact world snapshot and restore (continues bit for bit) | done |
+| SIMD and scalar builds give identical results | tested |
+| Hull and mesh shapes, other joint types, shape casts and overlaps, Box3D worker threads | not in the glue yet (the engine has them) |
 
-## Use from Rust (game engines)
-
-`crates/box3d-sys` compiles Box3D with clang for `wasm32-unknown-unknown` (and for the host), so a Rust engine links it into its own wasm module: no JS in the loop, no imports. It carries a tiny libc and maps Box3D SSE2 code to WASM SIMD.
-
-```toml
-box3d-sys = { git = "https://github.com/aaronpostels/box3d-wasm", rev = "<commit>" }
-```
-
-Needs `clang` with the wasm32 target on PATH (`CC_wasm32_unknown_unknown=clang`). The API is flat (ids are integers, data moves in float buffers): bodies, box, sphere and capsule shapes, weld, revolute and prismatic joints, contact and sensor events, ray cast, a capsule character mover, batch state read, and an exact world snapshot and restore. `crates/box3d-smoke` is the end-to-end check CI runs.
-
-## Architecture
-
-```text
-box3d-wasm/
-├── vendor/box3d/           # Git submodule tracking erincatto/box3d
-├── src/
-│   ├── c/
-│   │   ├── box3d_glue.h    # High-throughput C glue declarations
-│   │   └── box3d_glue.c    # Bulk memory synchronization & flat FFI
-│   └── ts/
-│       ├── index.ts        # Module entrypoint & factory loader
-│       ├── world.ts        # Ergonomic, zero-GC TypeScript engine wrapper
-│       └── types.ts        # TypeScript declarations & math tuples
-├── scripts/
-│   ├── build.ps1           # Windows PowerShell build runner
-│   └── build.sh            # Linux / macOS / WSL2 / CI build runner
-├── examples/
-│   ├── basic.ts            # Node.js / TS simulation test
-│   └── demo.html           # In-browser test
-├── .github/workflows/
-│   └── ci.yml              # Automated build & upstream sync workflow
-├── package.json
-└── tsconfig.json
-```
-
----
-
-## Quick Start
-
-### 1. Installation
+## JS / TS
 
 ```bash
 npm i github:aaronpostels/box3d-wasm
 ```
 
-### 2. Basic Engine Loop
-
 ```ts
 import { initBox3D, Box3DWorld, BodyType } from "box3d-wasm";
 
 const wasm = await initBox3D();
-const world = new Box3DWorld(wasm, [0, -9.81, 0]);
+const world = new Box3DWorld(wasm, [0, -9.81, 0], { sleep: true, continuous: true });
 
-// Create static ground
-const groundId = world.createBody({ type: BodyType.Static, position: [0, -1, 0] });
-world.createBoxShape(groundId, { halfWidth: 50, halfHeight: 1, halfDepth: 50 });
+const ground = world.createBody({ type: BodyType.Static, position: [0, -1, 0] });
+world.createBoxShape(ground, { halfWidth: 50, halfHeight: 1, halfDepth: 50 });
+const ball = world.createBody({ type: BodyType.Dynamic, position: [0, 10, 0] });
+world.createSphereShape(ball, { radius: 0.5, density: 1, restitution: 0.6 });
 
-// Create dynamic entity
-const entityId = world.createBody({ type: BodyType.Dynamic, position: [0, 10, 0] });
-world.createSphereShape(entityId, { radius: 0.5, density: 1.0, restitution: 0.6 });
-
-// Track bodies in engine
-const bodyIds = [groundId, entityId];
-const transformBuffer = new Float32Array(bodyIds.length * 7);
-
-function gameLoop(dt: number) {
-    // Step simulation
-    world.step(dt, 4);
-
-    // Sync all transforms into contiguous float array in 1 call (0 allocations)
-    world.syncBatchTransforms(bodyIds, transformBuffer);
-
-    // transformBuffer now contains [px, py, pz, qx, qy, qz, qw] for each entity
-    requestAnimationFrame(gameLoop);
-}
+const ids = [ground, ball];
+const out = new Float32Array(ids.length * 7); // px py pz qx qy qz qw per body
+world.step(1 / 60, 4);
+world.syncBatchTransforms(ids, out);          // no allocation
 ```
 
----
+The wrapper covers the basics. The whole glue API (`_b3Glue_*`, typed in `RawBox3DModule`) is on the module object for everything else: joints, events, character mover, snapshot. `test/snapshot.mjs` shows the raw calls.
 
-## Local Building
+## Rust
 
-### Prerequisites
+```toml
+box3d-sys = { git = "https://github.com/aaronpostels/box3d-wasm", rev = "<commit>" }
+```
 
-* Node.js 22+ & pnpm
-* Emscripten SDK (`emcc`)
+Needs `clang` with the wasm32 target (`CC_wasm32_unknown_unknown=clang`, `AR_wasm32_unknown_unknown=llvm-ar`). `build.rs` compiles Box3D and the glue; a tiny libc (`crates/box3d-sys/include/libc`, `src/shim.c`) stands in for the C library, and Box3D's SSE2 code maps to WASM SIMD through Emscripten's header-only intrinsics. It also builds for the host (MSVC, clang, gcc) for native tests. If your Rust build uses shared memory (`+atomics`), the C is built with atomics too.
 
-### Build Flavors
+The API is flat: ids are integers, data moves in float buffers. See `crates/box3d-sys/src/lib.rs`; `crates/box3d-smoke` is a complete example (step, events, ray, snapshot and restore) that CI runs in Node.
 
-* **Standard (WASM SIMD + SSE2)**:
-  ```powershell
-  # Windows
-  powershell -ExecutionPolicy Bypass -File scripts/build.ps1
+## Build locally
 
-  # Linux / WSL2
-  bash scripts/build.sh simd
-  ```
-
-* **Scalar Fallback (No SIMD)**:
-  ```powershell
-  powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Scalar
-  ```
-
-* **Multi-threaded (Web Workers & SharedArrayBuffer)**:
-  ```powershell
-  powershell -ExecutionPolicy Bypass -File scripts/build.ps1 -Threads
-  ```
-
-### Full Build (WASM + TypeScript)
+You do not need to install Emscripten, Docker is enough:
 
 ```bash
-npm run build
+docker run --rm -v "$PWD:/src" -w /src emscripten/emsdk:4.0.18 bash -c \
+  "bash scripts/build.sh simd && bash scripts/build.sh scalar && bash scripts/build.sh threads"
+npm install && npm run build:ts && npm test
 ```
 
----
+Rust: `cd crates/box3d-smoke && cargo build --target wasm32-unknown-unknown --release && node run.mjs`.
 
-## Updating Against Upstream Box3D
+Clone with `--recurse-submodules` (Box3D is `vendor/box3d`).
 
-To pull the latest commits from Erin Catto's upstream repository locally:
+## Updating
 
-```bash
-npm run update:upstream
-npm run build
-```
-
-In GitHub, the included workflow (`.github/workflows/ci.yml`) automatically checks for new Box3D commits every Monday and produces freshly compiled release artifacts.
-
----
+CI does it daily. By hand: `npm run update:upstream`, then build and test. Pin a Rust build to a commit of this repo; a commit pins its Box3D revision.
 
 ## License
 
-* Box3D is copyright (c) Erin Catto and licensed under the [MIT License](vendor/box3d/LICENSE).
-* This WebAssembly wrapper and glue code is licensed under the [MIT License](LICENSE).
+MIT. Third-party notices: [THIRD_PARTY.md](THIRD_PARTY.md).

@@ -91,4 +91,37 @@ export interface RawBox3DModule {
     _b3Glue_ApplyAngularImpulse(bodyId: bigint, ax: number, ay: number, az: number, wake: boolean | number): void;
 
     _b3Glue_CastRayClosest(worldId: number, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, outPtr8: number): number;
+
+    // Engine-grade API (box3d_glue_ext.c): bodies with velocity, shapes with flags, joints, events, batch state, character mover, snapshot.
+    _b3Glue_Configure(world: number, sleeping: boolean | number, continuous: boolean | number): void;
+    _b3Glue_SetBodyMass(body: bigint, mass: number): void;
+    _b3Glue_MoveCharacter(world: number, selfShape: bigint, pos3: number, halfHeight: number, radius: number, delta3: number, groundNormalY: number): number;
+    _b3Glue_JointIsValid(joint: bigint): boolean | number;
+    _b3Glue_SetGravity(world: number, gx: number, gy: number, gz: number): void;
+    _b3Glue_CreateBodyEx(world: number, type: number, pose7: number, vel6: number, flags: number): bigint;
+    _b3Glue_GetBatchState(ids: number, count: number, out: number): void;
+    _b3Glue_SetTargetTransform(body: bigint, pose7: number, dt: number): void;
+    _b3Glue_BodyMass(body: bigint): number;
+    _b3Glue_BodyIsAwake(body: bigint): boolean | number;
+    _b3Glue_AddBox(body: bigint, hx: number, hy: number, hz: number, density: number, friction: number, restitution: number, flags: number): bigint;
+    _b3Glue_AddSphere(body: bigint, radius: number, density: number, friction: number, restitution: number, flags: number): bigint;
+    _b3Glue_AddCapsule(body: bigint, halfHeight: number, radius: number, density: number, friction: number, restitution: number, flags: number): bigint;
+    _b3Glue_ShapeBody(shape: bigint): bigint;
+    _b3Glue_CreateWeld(world: number, a: bigint, b: bigint, anchorA: number, anchorB: number): bigint;
+    _b3Glue_CreateRevolute(world: number, a: bigint, b: bigint, anchorA: number, anchorB: number, axis: number, limited: number, lo: number, hi: number): bigint;
+    _b3Glue_CreatePrismatic(world: number, a: bigint, b: bigint, anchorA: number, anchorB: number, axis: number, limited: number, lo: number, hi: number): bigint;
+    _b3Glue_ContactBeginEvents(world: number, out: number, max: number): number;
+    _b3Glue_ContactEndEvents(world: number, out: number, max: number): number;
+    _b3Glue_SensorBeginEvents(world: number, out: number, max: number): number;
+    _b3Glue_SensorEndEvents(world: number, out: number, max: number): number;
+    _b3Glue_RayClosest(world: number, origin: number, d: number, out7: number): bigint;
+    _b3Glue_SnapshotTake(world: number): number;
+    _b3Glue_SnapshotData(rec: number): number;
+    _b3Glue_SnapshotSize(rec: number): number;
+    _b3Glue_SnapshotFree(rec: number): void;
+    _b3Glue_RestoreCreate(data: number, size: number): number;
+    _b3Glue_RestoreWorld(p: number): number;
+    _b3Glue_RestoreBodyCount(p: number): number;
+    _b3Glue_RestoreBodyId(p: number, i: number): bigint;
+    _b3Glue_RestoreDestroy(p: number): void;
 }

@@ -80,8 +80,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Add the wasm target
-        run: rustup target add wasm32-unknown-unknown
+      - name: Install clang, llvm and the wasm target
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm lld
+          rustup target add wasm32-unknown-unknown
 
       - name: Build and run the smoke module
         env:
