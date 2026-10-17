@@ -317,3 +317,22 @@ void b3Glue_SetTaskSystem(uint32_t world, int workers, b3EnqueueTaskCallback* en
 
 int b3Glue_WorkerCount(uint32_t world) { return b3World_GetWorkerCount(b3LoadWorldId(world)); }
 
+
+// Bodies that moved or fell asleep in the last step, 13 floats each (as GetBatchState): only these changed since the step before.
+// Returns the number of moved bodies, which can exceed `max`: only the first `max` are written.
+int b3Glue_MovedBodies(uint32_t world, uint64_t* ids, float* out, int max) {
+    b3BodyEvents ev = b3World_GetBodyEvents(b3LoadWorldId(world));
+    int n = ev.moveCount < max ? ev.moveCount : max;
+    for (int i = 0; i < n; ++i) {
+        const b3BodyMoveEvent* e = ev.moveEvents + i;
+        ids[i] = b3StoreBodyId(e->bodyId);
+        b3Vec3 v = b3Body_GetLinearVelocity(e->bodyId);
+        b3Vec3 w = b3Body_GetAngularVelocity(e->bodyId);
+        float* o = out + i * 13;
+        o[0] = (float)e->transform.p.x; o[1] = (float)e->transform.p.y; o[2] = (float)e->transform.p.z;
+        o[3] = e->transform.q.v.x; o[4] = e->transform.q.v.y; o[5] = e->transform.q.v.z; o[6] = e->transform.q.s;
+        o[7] = v.x; o[8] = v.y; o[9] = v.z;
+        o[10] = w.x; o[11] = w.y; o[12] = w.z;
+    }
+    return ev.moveCount;
+}

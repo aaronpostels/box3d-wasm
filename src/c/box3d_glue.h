@@ -58,6 +58,7 @@ B3_GLUE_EXPORT void b3Glue_ApplyAngularImpulse(uint64_t bodyIdRaw, float ax, flo
 B3_GLUE_EXPORT bool b3Glue_CastRayClosest(uint32_t worldIdRaw, float ox, float oy, float oz, float dx, float dy, float dz, float* outResult8);
 
 // Part 2 (box3d_glue_ext.c): engine-grade API
+B3_GLUE_EXPORT int b3Glue_MovedBodies(uint32_t world, uint64_t* ids, float* out, int max);
 B3_GLUE_EXPORT void b3Glue_SetTaskSystem(uint32_t world, int workers, b3EnqueueTaskCallback* enqueue, b3FinishTaskCallback* finish);
 B3_GLUE_EXPORT int b3Glue_WorkerCount(uint32_t world);
 B3_GLUE_EXPORT void b3Glue_SetSleepThreshold(uint64_t body, float threshold);

@@ -51,6 +51,8 @@ extern "C" {
     pub fn b3Glue_SetAngularVelocity(body: Body, x: f32, y: f32, z: f32);
     /// 13 floats per body: position, rotation, linear velocity, angular velocity.
     pub fn b3Glue_GetBatchState(ids: *const u64, count: i32, out: *mut f32);
+    /// Bodies that moved or fell asleep in the last step, 13 floats each. Returns how many moved (may exceed `max`).
+    pub fn b3Glue_MovedBodies(world: World, ids: *mut u64, out: *mut f32, max: i32) -> i32;
     pub fn b3Glue_SetTargetTransform(body: Body, pose7: *const f32, dt: f32);
     /// Speed (m/s) under which a body counts as at rest for sleeping.
     pub fn b3Glue_SetSleepThreshold(body: Body, threshold: f32);
