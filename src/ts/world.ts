@@ -161,14 +161,23 @@ export class Box3DWorld {
      * in a single native call with 0 per-body JS invocation overhead.
      * Output format per body: 7 floats [px, py, pz, qx, qy, qz, qw].
      *
-     * @note When targetBuffer is omitted, returns a direct view into WASM memory.
-     * Subsequent syncBatchTransforms calls will overwrite this data, and WASM heap growth can
-     * detach it. Pass targetBuffer or use .slice() if retaining the array across frames.
+     * @param bodyIds Array or BigUint64Array of bodies to query.
+     * @param targetBuffer Optional preallocated Float32Array to write into.
+     *        - For guaranteed 0 allocations (even when body count fluctuates), pass an external Float32Array.
+     *        - If passing a view on the WASM heap, call reserveBatchCapacity() upfront so heap growth does not detach it.
+     *        - If omitted, returns a direct view into WASM memory (zero-allocation when body count is constant).
      */
     public syncBatchTransforms(bodyIds: BodyId[] | BigUint64Array, targetBuffer?: Float32Array): Float32Array {
         this.checkDestroyed();
         const count = bodyIds.length;
         if (count === 0) return targetBuffer ?? Box3DWorld.EMPTY_FLOAT32;
+
+        const floatCount = count * 7;
+        if (targetBuffer && targetBuffer.length < floatCount) {
+            throw new RangeError(
+                `Box3DWorld.syncBatchTransforms: targetBuffer length (${targetBuffer.length}) is smaller than required float count (${floatCount}).`
+            );
+        }
 
         this.ensureBatchCapacity(count);
 
@@ -185,15 +194,9 @@ export class Box3DWorld {
         // Native batch read
         this.wasm._b3Glue_GetBatchTransforms(this.batchIdsPtr, count, this.batchFloatsPtr);
 
-        const floatCount = count * 7;
         const floatOffset = this.batchFloatsPtr >>> 2;
 
         if (targetBuffer) {
-            if (targetBuffer.length < floatCount) {
-                throw new RangeError(
-                    `Box3DWorld.syncBatchTransforms: targetBuffer length (${targetBuffer.length}) is smaller than required float count (${floatCount}).`
-                );
-            }
             const h = this.wasm.HEAPF32;
             // Handle possible overlapping memory if targetBuffer is also a view on WASM heap
             if (
@@ -223,6 +226,15 @@ export class Box3DWorld {
         }
 
         return this.cachedWasmFloatView;
+    }
+
+    /**
+     * Pre-reserves batch memory for at least the given body count.
+     * Call this when using heap-backed target buffers to prevent WASM heap reallocation detachment.
+     */
+    public reserveBatchCapacity(capacity: number): void {
+        this.checkDestroyed();
+        this.ensureBatchCapacity(capacity);
     }
 
     public setLinearVelocity(bodyId: BodyId, v: Vec3Tuple): void {
