@@ -1,9 +1,11 @@
-// Stub for the filters area (scaffold). No assertions yet: checks that the smoke wasm builds and imports nothing.
+// Filters area: shape category, mask and group, plus query filters on ray casts.
+// The checks live in the Rust smoke module (crates/box3d-smoke/src/lib.rs, run_filters). A failed check returns its code.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const wasm = new URL("../crates/box3d-smoke/target/wasm32-unknown-unknown/release/box3d_smoke.wasm", import.meta.url);
 const module = new WebAssembly.Module(readFileSync(wasm));
 assert.equal(WebAssembly.Module.imports(module).length, 0, "smoke module should import nothing");
-assert.equal(typeof new WebAssembly.Instance(module, {}).exports.run, "function", "smoke module should export run");
-console.log("ok filters (scaffold)");
+const { run_filters } = new WebAssembly.Instance(module, {}).exports;
+assert.equal(run_filters(), 0, "a filters check failed (the returned code is the check number)");
+console.log("ok filters: category and mask pass-through, negative and positive groups, query filters");
