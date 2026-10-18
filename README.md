@@ -22,13 +22,18 @@ Box3D itself is alpha. This repo tracks its `main` branch: a daily job pulls ups
 | Exact world snapshot and restore (continues bit for bit) | done |
 | SIMD and scalar builds give identical results | tested |
 | Worker threads | Rust crate on a rayon pool (`use_rayon`, scales to about 8); not in the JS wrapper |
+| Hull, offset and rotated boxes, compound, per-shape material, sensor and events flags, user material (Rust smoke and JS wrapper, `test/ts_wrapper.mjs`); mesh and heightfield shapes not in the glue yet | partly done |
+| Spherical, distance, wheel, motor, filter joints; their limits, springs and motors; joint reaction forces | done (`test/joints.mjs`, `test/ts_wrapper.mjs`, `cargo test` in `crates/box3d-smoke`) |
+| Hull and mesh shapes, shape casts and overlaps | not in the glue yet (the engine has them) |
+| Shape casts (sphere, box, capsule, hull), overlaps (AABB, shape), all-hits ray cast, capsule mover collide and cast | done (`test/queries.mjs`, `test/ts_wrapper.mjs`) |
+| Hull and mesh shapes, other joint types | not in the glue yet (the engine has them) |
+| Body damping, gravity scale, motion locks, mass data, user data (32 bit), enable/disable, batch impulses, shape filters, filtered ray cast | done in the C glue, Rust crate (`bodies`, `filters`) and JS wrapper (`test/ts_wrapper.mjs`) |
 | Hull and mesh shapes, other joint types, shape casts and overlaps | not in the glue yet (the engine has them) |
 
 ## Roadmap
 
 Wanted next (Artisan, the first user, tracks this in its own list):
 - Glue: hull, mesh, compound and heightfield shapes; spherical, distance, wheel and motor joints; shape casts and overlaps; collision filters; moved-body events in one buffer; damping, gravity scale, motion locks, user data.
-- TypeScript wrapper methods for the newer glue calls (they are typed, not wrapped).
 - The daily upstream bump and release have not run on a real upstream change yet; npm publish; a test for the Emscripten threads build.
 
 ## JS / TS
@@ -54,7 +59,7 @@ world.step(1 / 60, 4);
 world.syncBatchTransforms(ids, out);          // no allocation
 ```
 
-The wrapper covers the basics. The whole glue API (`_b3Glue_*`, typed in `RawBox3DModule`) is on the module object for everything else: joints, events, character mover, snapshot. `test/snapshot.mjs` shows the raw calls.
+The wrapper covers bodies, shapes (box, sphere, capsule, hull, offset and rotated box, material, sensor and events flags, user material), joints (all types with limits, springs, motors and reaction), shape casts and overlaps, the capsule mover's collide and cast, and collision filters. The whole glue API (`_b3Glue_*`, typed in `RawBox3DModule`) stays on the module object for the rest: events, the character mover step, snapshot. `test/snapshot.mjs` and `test/ts_wrapper.mjs` show the raw calls.
 
 ## Rust
 
