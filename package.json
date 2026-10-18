@@ -29,7 +29,7 @@
     "build": "npm run build:wasm && npm run build:ts",
     "build:wasm": "bash scripts/build.sh simd && bash scripts/build.sh scalar && bash scripts/build.sh threads",
     "build:ts": "tsc",
-    "test": "node test/smoke.mjs && node test/snapshot.mjs",
+    "test": "node test/smoke.mjs && node test/snapshot.mjs && node test/threads.mjs && node test/shapes.mjs && node test/joints.mjs && node test/queries.mjs && node test/bodies.mjs && node test/filters.mjs && node test/ts_types.mjs && node test/ts_wrapper.mjs",
     "update:upstream": "git submodule update --remote --merge vendor/box3d"
   },
   "devDependencies": {

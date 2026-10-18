@@ -47,6 +47,6 @@ else
 fi
 
 echo "Compiling with emcc..."
-emcc "${C_FLAGS[@]}" vendor/box3d/src/*.c src/c/box3d_glue.c src/c/box3d_glue_ext.c "${LINK_FLAGS[@]}" -o "$OUT_FILE"
+emcc "${C_FLAGS[@]}" vendor/box3d/src/*.c src/c/box3d_glue.c src/c/box3d_glue_ext.c src/c/box3d_glue_shapes.c src/c/box3d_glue_joints.c src/c/box3d_glue_queries.c src/c/box3d_glue_bodies.c src/c/box3d_glue_filters.c "${LINK_FLAGS[@]}" -o "$OUT_FILE"
 
 echo "Build successful: $OUT_FILE"
