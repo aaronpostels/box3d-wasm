@@ -56,6 +56,17 @@ jobs:
         with:
           node-version: 22.14.0
 
+      - name: Build the Rust smoke module (the area tests load it)
+        env:
+          CC_wasm32_unknown_unknown: clang
+          AR_wasm32_unknown_unknown: llvm-ar
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm lld
+          rustup target add wasm32-unknown-unknown
+          cd crates/box3d-smoke
+          cargo build --target wasm32-unknown-unknown --release
+
       - name: Build TypeScript and smoke test
         run: |
           npm install --no-package-lock
