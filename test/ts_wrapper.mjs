@@ -6,6 +6,8 @@
 // run_filters, run_shapes), so both sides check the same numbers. Needs the Emscripten build (npm run build:wasm and
 // npm run build:ts). Without dist/ it skips. Only the wrapper methods are used; events are read through the raw module.
 import assert from "node:assert/strict";
+// JSON.stringify for assertion messages: shape and body ids are BigInt, which JSON.stringify refuses.
+const show = (x) => JSON.stringify(x, (_k, v) => (typeof v === "bigint" ? String(v) : v));
 import { existsSync } from "node:fs";
 
 const built = ["box3d.js", "index.js"].filter((f) => !existsSync(new URL(`../dist/${f}`, import.meta.url)));
@@ -108,7 +110,7 @@ test("compound body mass is the sum of its shapes", () => {
 });
 
 test("per-shape friction changes sliding distance", () => {
-    const w = newWorld(0);
+    const w = newWorld(-10);
     floor(w, 0);
     // Both slide at 4 m/s on the same floor. Friction 0 mixes to 0; 0.9 mixes to about 0.73.
     const slick = w.createBody({ type: BodyType.Dynamic, position: [0, 0.5, 0] });
@@ -489,13 +491,13 @@ test("shape casts, overlaps, all-hits ray cast and capsule mover (smoke run_quer
 
     // Shape cast, closest hit.
     let h = w.castShape({ kind: "sphere", radius: 0.5 }, [0, 20, 0], [0, -40, 0]);
-    assert.ok(h && h.shape === sphere && near(h.fraction, 0.35, 1e-3) && h.normal[1] >= 0.99, `sphere cast ${JSON.stringify(h)}`);
+    assert.ok(h && h.shape === sphere && near(h.fraction, 0.35, 1e-3) && h.normal[1] >= 0.99, `sphere cast ${show(h)}`);
     h = w.castShape({ kind: "box", halfExtents: [0.5, 0.5, 0.5] }, [10, 10, 0], [0, -20, 0]);
-    assert.ok(h && h.shape === boxed && near(h.fraction, 0.275, 1e-3), `box cast ${JSON.stringify(h)}`);
+    assert.ok(h && h.shape === boxed && near(h.fraction, 0.275, 1e-3), `box cast ${show(h)}`);
     h = w.castShape({ kind: "capsule", halfHeight: 0.5, radius: 0.5 }, [-10, 10, 0], [0, -20, 0]);
-    assert.ok(h && h.shape === capsule && near(h.fraction, 0.275, 1e-3), `capsule cast ${JSON.stringify(h)}`);
+    assert.ok(h && h.shape === capsule && near(h.fraction, 0.275, 1e-3), `capsule cast ${show(h)}`);
     h = w.castShape({ kind: "hull", radius: 0.1, points: [-0.5, 0, -0.5, 0.5, 0, -0.5, 0, 0, 0.5, 0, 0.5, 0] }, [-30, 20, 0], [0, -40, 0]);
-    assert.ok(h && h.shape === ground && near(h.fraction, 0.4975, 1e-3), `hull cast ${JSON.stringify(h)}`);
+    assert.ok(h && h.shape === ground && near(h.fraction, 0.4975, 1e-3), `hull cast ${show(h)}`);
     assert.equal(w.castShape({ kind: "sphere", radius: 0.5 }, [-30, 20, 0], [0, -10, 0]), null);
 
     // Capsule mover: collide (penetrating the ground), self filter, and cast.
