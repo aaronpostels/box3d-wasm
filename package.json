@@ -19,6 +19,7 @@
     "src/c",
     "src/ts",
     "crates/box3d-sys",
+    "!crates/box3d-sys/target",
     "vendor/box3d/include",
     "vendor/box3d/src",
     "README.md",
