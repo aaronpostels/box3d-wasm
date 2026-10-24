@@ -13,6 +13,9 @@ const CHECKS = [
   "sensor passes through and reports overlap",
   "contact events flag gates the events",
   "user material round-trips through the shape",
+  "ball rests on a triangle mesh",
+  "ball rests on a height field",
+  "bad mesh and height field data are rejected",
 ];
 
 const wasm = new URL("../crates/box3d-smoke/target/wasm32-unknown-unknown/release/box3d_smoke.wasm", import.meta.url);

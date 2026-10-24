@@ -72,6 +72,12 @@ export interface BoxTransformedShapeOptions extends ShapeMaterialOptions {
     rotation?: QuatTuple;
 }
 
+/** Static terrain shapes (mesh, height field): material and flags; there is no density, they have no mass. */
+export type TerrainShapeOptions = Omit<ShapeMaterialOptions, "density"> & {
+    /** Scale of the mesh, or of the height field grid (x and z spacing, y height scale). Default [1, 1, 1]. */
+    scale?: Vec3Tuple;
+};
+
 /** A shape hit from a shape cast, an all-hits ray cast or a filtered ray cast. */
 export interface ShapeHit {
     shape: ShapeId;
@@ -140,6 +146,28 @@ export interface JointOptions {
 export interface WheelJointOptions extends JointOptions {
     /** Suspension direction in body A's local frame. Required: a zero axis is not a direction. */
     axis: Vec3Tuple;
+}
+
+/** Hinge or slider made by createRevoluteJoint / createPrismaticJoint. */
+export interface AxisJointOptions extends WheelJointOptions {
+    /** Limits [lower, upper]: radians for a hinge, meters for a slider. Default none. */
+    limits?: [number, number];
+}
+
+/** Spring of a hinge (target in radians) or slider (target in meters). */
+export interface AxisJointSpring {
+    enable: boolean;
+    hertz: number;
+    dampingRatio: number;
+    /** Rest angle (hinge) or rest translation (slider). */
+    target: number;
+}
+
+/** Motor of a hinge (speed rad/s, limit is a torque) or slider (speed m/s, limit is a force). */
+export interface AxisJointMotor {
+    enable: boolean;
+    speed: number;
+    maxForce: number;
 }
 
 export interface JointReaction {
@@ -305,7 +333,19 @@ export interface RawBox3DModule {
     // Glue area files (src/c/box3d_glue_<area>.h): shapes, joints, queries, filters, bodies. Pointers are byte offsets.
     _b3Glue_AddHull(body: bigint, points: number, count: number, density: number, friction: number, restitution: number, userMaterial: bigint, flags: number): bigint;
     _b3Glue_AddBoxTransformed(body: bigint, half3: number, center3: number, quat4: number, density: number, friction: number, restitution: number, userMaterial: bigint, flags: number): bigint;
+    _b3Glue_SnapshotTake(world: number): number;
+    _b3Glue_SnapshotData(rec: number): number;
+    _b3Glue_SnapshotSize(rec: number): number;
+    _b3Glue_SnapshotFree(rec: number): void;
+    _b3Glue_RestoreCreate(data: number, size: number): number;
+    _b3Glue_RestoreWorld(player: number): number;
+    _b3Glue_RestoreBodyCount(player: number): number;
+    _b3Glue_RestoreBodyId(player: number, index: number): bigint;
+    _b3Glue_RestoreDestroy(player: number): void;
+    _b3Glue_RestoreInPlace(player: number): boolean;
     _b3Glue_ShapeUserMaterial(shape: bigint): bigint;
+    _b3Glue_AddMesh(body: bigint, vertices: number, vertexCount: number, indices: number, triangleCount: number, scale3: number, friction: number, restitution: number, userMaterial: bigint, flags: number): bigint;
+    _b3Glue_AddHeightfield(body: bigint, heights: number, countX: number, countZ: number, scale3: number, minHeight: number, maxHeight: number, friction: number, restitution: number, userMaterial: bigint, flags: number): bigint;
 
     _b3Glue_CreateSpherical(world: number, a: bigint, b: bigint, anchorA: number, anchorB: number): bigint;
     _b3Glue_CreateDistance(world: number, a: bigint, b: bigint, anchorA: number, anchorB: number, length: number): bigint;
@@ -330,6 +370,12 @@ export interface RawBox3DModule {
     _b3Glue_WheelSetSpin(joint: bigint, enable: boolean | number, speed: number, maxTorque: number): void;
     _b3Glue_WheelSetSteering(joint: bigint, enable: boolean | number, hertz: number, dampingRatio: number, targetAngle: number, maxTorque: number, enableLimit: boolean | number, lower: number, upper: number): void;
     _b3Glue_WheelState(joint: bigint, out3: number): void;
+    _b3Glue_RevoluteSetSpring(joint: bigint, enable: number, hertz: number, dampingRatio: number, targetAngle: number): void;
+    _b3Glue_RevoluteSetMotor(joint: bigint, enable: number, speed: number, maxTorque: number): void;
+    _b3Glue_RevoluteAngle(joint: bigint): number;
+    _b3Glue_PrismaticSetSpring(joint: bigint, enable: number, hertz: number, dampingRatio: number, targetTranslation: number): void;
+    _b3Glue_PrismaticSetMotor(joint: bigint, enable: number, speed: number, maxForce: number): void;
+    _b3Glue_PrismaticTranslation(joint: bigint): number;
 
     _b3Glue_CastShape(world: number, kind: number, shape: number, shapeLen: number, origin3: number, delta3: number, out7: number): bigint;
     _b3Glue_OverlapAABB(world: number, aabb6: number, ids: number, max: number): number;
@@ -337,6 +383,7 @@ export interface RawBox3DModule {
     _b3Glue_CastRayAll(world: number, origin3: number, delta3: number, ids: number, out7: number, max: number): number;
     _b3Glue_CollideMover(world: number, origin3: number, capsule7: number, self: bigint, ids: number, planes4: number, max: number): number;
     _b3Glue_CastMover(world: number, origin3: number, capsule7: number, delta3: number, self: bigint): number;
+    _b3Glue_CastBoxMover(world: number, origin3: number, half3: number, quat4: number, delta3: number, self: bigint, normal3: number): number;
 
     _b3Glue_SetShapeFilter(shape: bigint, category: bigint, mask: bigint, group: number, invokeContacts: boolean | number): void;
     _b3Glue_GetShapeFilter(shape: bigint, out3: number): void;

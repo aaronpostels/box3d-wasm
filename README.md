@@ -22,19 +22,24 @@ Box3D itself is alpha. This repo tracks its `main` branch: a daily job pulls ups
 | Exact world snapshot and restore (continues bit for bit) | done |
 | SIMD and scalar builds give identical results | tested |
 | Worker threads | Rust crate on a rayon pool (`use_rayon`, scales to about 8); not in the JS wrapper |
-| Hull, offset and rotated boxes, compound, per-shape material, sensor and events flags, user material (Rust smoke and JS wrapper, `test/ts_wrapper.mjs`); mesh and heightfield shapes not in the glue yet | partly done |
+| Hull, offset and rotated boxes, compound, per-shape material, sensor and events flags, user material, triangle mesh and height field shapes (static bodies; the glue owns and frees the mesh data) | done (`test/shapes.mjs`, `test/ts_wrapper.mjs`) |
 | Spherical, distance, wheel, motor, filter joints; their limits, springs and motors; joint reaction forces | done (`test/joints.mjs`, `test/ts_wrapper.mjs`, `cargo test` in `crates/box3d-smoke`) |
-| Hull and mesh shapes, shape casts and overlaps | not in the glue yet (the engine has them) |
 | Shape casts (sphere, box, capsule, hull), overlaps (AABB, shape), all-hits ray cast, capsule mover collide and cast | done (`test/queries.mjs`, `test/ts_wrapper.mjs`) |
-| Hull and mesh shapes, other joint types | not in the glue yet (the engine has them) |
 | Body damping, gravity scale, motion locks, mass data, user data (32 bit), enable/disable, batch impulses, shape filters, filtered ray cast | done in the C glue, Rust crate (`bodies`, `filters`) and JS wrapper (`test/ts_wrapper.mjs`) |
-| Hull and mesh shapes, other joint types, shape casts and overlaps | not in the glue yet (the engine has them) |
+| Revolute and prismatic spring (rest angle / translation), motor and readout | done (`test/joints.mjs`) |
+| Box cast for cuboid characters (`castBoxMover`: stops at the first hit, no sliding; Box3D's own mover query is capsule only) | done (`test/queries.mjs`) |
+| Reset a restored world to its snapshot in place (`restoreInPlace`, same world and body ids; the target is the snapshot the player was made from) | done (`test/snapshot.mjs`; the dist check runs once the dist is rebuilt) |
 
 ## Roadmap
 
 Wanted next (Artisan, the first user, tracks this in its own list):
-- Glue: hull, mesh, compound and heightfield shapes; spherical, distance, wheel and motor joints; shape casts and overlaps; collision filters; moved-body events in one buffer; damping, gravity scale, motion locks, user data.
 - The daily upstream bump and release have not run on a real upstream change yet; npm publish; a test for the Emscripten threads build.
+
+## Limits
+
+- User data is 32-bit: body user data (`setBodyUserData`) holds an unsigned 32-bit integer (a wasm32 pointer in Box3D). Keep 64-bit ids in a side table keyed by the body id.
+- Mesh and height field shapes belong on static bodies (Box3D rule).
+- World creation and destruction take a lock in the glue, so native tests may build worlds on parallel threads. Stepping different worlds in parallel is safe.
 
 ## JS / TS
 

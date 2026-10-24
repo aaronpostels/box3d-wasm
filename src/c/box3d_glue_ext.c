@@ -209,6 +209,17 @@ int b3Glue_RestoreBodyCount(const b3RecPlayer* p) { return b3RecPlayer_GetBodyCo
 uint64_t b3Glue_RestoreBodyId(const b3RecPlayer* p, int i) { return b3StoreBodyId(b3RecPlayer_GetBodyId(p, i)); }
 void b3Glue_RestoreDestroy(b3RecPlayer* p) { b3DestroyPlayer(p); }
 
+// Puts the player's world back to the snapshot it was created from, in place: the world id stays the same, and so does the
+// player's body list (read the ids again with b3Glue_RestoreBodyId, they come back in the same order). Anything made in the
+// world since, and any stepping, is dropped. Upstream's player owns its world and has no call to load other bytes into it,
+// so the target is always the snapshot given to b3Glue_RestoreCreate; to go to a newer one, create a new player.
+// Returns false when the player is NULL or the restore failed.
+bool b3Glue_RestoreInPlace(b3RecPlayer* p) {
+    if (p == NULL) return false;
+    b3RecPlayer_Restart(p);
+    return b3RecPlayer_GetFrame(p) == 0 && !b3RecPlayer_HasDiverged(p);
+}
+
 bool b3Glue_JointIsValid(uint64_t joint) { return b3Joint_IsValid(b3LoadJointId(joint)); }
 
 // ---- character mover ----

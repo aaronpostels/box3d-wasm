@@ -98,6 +98,8 @@ extern "C" {
     pub fn b3Glue_RestoreBodyCount(player: *const c_void) -> i32;
     pub fn b3Glue_RestoreBodyId(player: *const c_void, i: i32) -> Body;
     pub fn b3Glue_RestoreDestroy(player: *mut c_void);
+    /// Puts the player's world back to the snapshot it was created from, keeping the world id. See the C header comment.
+    pub fn b3Glue_RestoreInPlace(player: *mut c_void) -> bool;
 }
 
 /// Runs a world's parallel work on the rayon pool. Needs a pool with at least `workers` threads (the caller steps as worker 0,

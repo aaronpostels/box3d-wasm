@@ -211,3 +211,31 @@ float b3Glue_CastMover(uint32_t world, const float* origin3, const float* capsul
     SelfFilter s = selfOf(self);
     return b3World_CastMover(worldOf(world), posOf(origin3), &cap, vecOf(delta3), b3DefaultQueryFilter(), notSelf, &s);
 }
+
+typedef struct {
+    SelfFilter self;
+    ClosestCast best;
+} BoxCast;
+
+static float keepClosestNotSelf(b3ShapeId shapeId, b3Pos point, b3Vec3 normal, float fraction, uint64_t material, int tri, int child, void* ctx) {
+    BoxCast* c = (BoxCast*)ctx;
+    if (!notSelf(shapeId, &c->self)) return -1.0f;
+    return keepClosest(shapeId, point, normal, fraction, material, tri, child, &c->best);
+}
+
+float b3Glue_CastBoxMover(uint32_t world, const float* origin3, const float* half3, const float* quat4, const float* delta3, uint64_t self, float* normal3) {
+    b3Quat q = { .v = { quat4[0], quat4[1], quat4[2] }, .s = quat4[3] };
+    b3Vec3 pts[8];
+    for (int i = 0; i < 8; ++i) {
+        b3Vec3 corner = { (i & 1) ? half3[0] : -half3[0], (i & 2) ? half3[1] : -half3[1], (i & 4) ? half3[2] : -half3[2] };
+        pts[i] = b3RotateVector(q, corner);
+    }
+    b3ShapeProxy proxy = { pts, 8, 0.0f };
+    BoxCast c = { selfOf(self), { .fraction = 1.0f } };
+    b3World_CastShape(worldOf(world), posOf(origin3), &proxy, vecOf(delta3), b3DefaultQueryFilter(), keepClosestNotSelf, &c);
+    if (normal3) {
+        b3Vec3 n = c.best.hit ? c.best.normal : (b3Vec3){ 0, 0, 0 };
+        normal3[0] = n.x; normal3[1] = n.y; normal3[2] = n.z;
+    }
+    return c.best.fraction;
+}

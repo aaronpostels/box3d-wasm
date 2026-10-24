@@ -123,6 +123,17 @@ const pins = [
     ["getBodyUserData", "[BodyId]", "number"],
     ["setBodyEnabled", "[BodyId, boolean]", "void"],
     ["isBodyEnabled", "[BodyId]", "boolean"],
+    ["createMesh", "[BodyId, ArrayLike<number>, ArrayLike<number>, TerrainShapeOptions?]", "ShapeId | null"],
+    ["createHeightfield", "[BodyId, ArrayLike<number>, number, number, (TerrainShapeOptions & { minHeight?: number; maxHeight?: number })?]", "ShapeId | null"],
+    ["castBoxMover", "[Vec3Tuple, Vec3Tuple, Vec3Tuple, QuatTuple?, ShapeId?]", "{ fraction: number; normal: Vec3Tuple }"],
+    ["createRevoluteJoint", "[BodyId, BodyId, AxisJointOptions]", "JointId"],
+    ["createPrismaticJoint", "[BodyId, BodyId, AxisJointOptions]", "JointId"],
+    ["setRevoluteSpring", "[JointId, AxisJointSpring]", "void"],
+    ["setRevoluteMotor", "[JointId, AxisJointMotor]", "void"],
+    ["getRevoluteAngle", "[JointId]", "number"],
+    ["setPrismaticSpring", "[JointId, AxisJointSpring]", "void"],
+    ["setPrismaticMotor", "[JointId, AxisJointMotor]", "void"],
+    ["getPrismaticTranslation", "[JointId]", "number"],
     ["applyImpulses", "[BodyId[] | BigUint64Array, ArrayLike<number>, boolean?]", "void"],
 ];
 
@@ -131,7 +142,8 @@ const typeImports = [
     "BoxTransformedShapeOptions", "ProxyShape", "MoverCapsule", "MoverPlane", "ShapeFilter", "MotionLocks",
     "MassData", "JointOptions", "WheelJointOptions", "JointReaction", "DistanceSpring", "DistanceLengthRange",
     "DistanceMotor", "MotorSpring", "SphericalSpring", "SphericalMotor", "SphericalAngles", "WheelSuspension",
-    "WheelSpin", "WheelSteering", "WheelState",
+    "WheelSpin", "WheelSteering", "WheelState", "TerrainShapeOptions", "QuatTuple", "AxisJointOptions", "AxisJointSpring",
+    "AxisJointMotor",
 ];
 
 const header = [

@@ -79,6 +79,55 @@ pub extern "C" fn run() -> i32 {
     0
 }
 
+/// Restore in place: a world restored from a snapshot, stepped, then reset with b3Glue_RestoreInPlace, keeps its id and
+/// replays the same 100 steps bit for bit. 0 when it holds, else 1..=6.
+#[no_mangle]
+pub extern "C" fn run_restore_in_place() -> i32 {
+    let (w, ids) = build();
+    unsafe {
+        for _ in 0..100 {
+            b3Glue_Step(w, 1.0 / 60.0, 4);
+        }
+        let snap = b3Glue_SnapshotTake(w);
+        let bytes = core::slice::from_raw_parts(b3Glue_SnapshotData(snap), b3Glue_SnapshotSize(snap) as usize).to_vec();
+        b3Glue_SnapshotFree(snap);
+        for _ in 0..100 {
+            b3Glue_Step(w, 1.0 / 60.0, 4);
+        }
+        let original = state(&ids);
+        let player = b3Glue_RestoreCreate(bytes.as_ptr(), bytes.len() as i32);
+        if player.is_null() {
+            return 1;
+        }
+        let rw = b3Glue_RestoreWorld(player);
+        let bodies = |p| (1..b3Glue_RestoreBodyCount(p)).map(|i| b3Glue_RestoreBodyId(p, i)).collect::<Vec<Body>>();
+        let rids = bodies(player);
+        let at_snapshot = state(&rids);
+        // Round 1 and 2: run, reset in place, run again. Every round must end on the original state.
+        for _ in 0..2 {
+            for _ in 0..100 {
+                b3Glue_Step(rw, 1.0 / 60.0, 4);
+            }
+            if state(&rids) != original {
+                return 2; // restored world diverged
+            }
+            if !b3Glue_RestoreInPlace(player) {
+                return 3;
+            }
+            if b3Glue_RestoreWorld(player) != rw {
+                return 4; // the world id must not change
+            }
+            let after = bodies(player);
+            if after != rids || state(&after) != at_snapshot {
+                return 5; // body ids and state are back at the snapshot
+            }
+        }
+        b3Glue_RestoreDestroy(player);
+        b3Glue_DestroyWorld(w);
+    }
+    0
+}
+
 // ---- shapes ----
 // Each check asserts one shape feature against physics or a query. run_shapes returns 0, or 10 + the index of the
 // first failing check (the order is listed in test/shapes.mjs).
@@ -294,10 +343,47 @@ fn user_material_round_trips() -> bool {
     }
 }
 
+/// A ball dropped from y=2 onto a static body that holds `terrain` ends at rest with its centre near y=0.5.
+fn ball_rests_on(terrain: impl Fn(Body) -> Option<Shape>) -> bool {
+    let w = shape_world();
+    let ground = shape_body(w, BODY_STATIC, [-10.0, 0.0, -10.0], [0.0; 3]);
+    if terrain(ground).is_none() {
+        return false;
+    }
+    let b = shape_body(w, BODY_DYNAMIC, [0.0, 2.0, 0.0], [0.0; 3]);
+    unsafe { b3Glue_AddSphere(b, 0.5, 1.0, 0.6, 0.0, 0) };
+    shape_step(w, 180);
+    let y = shape_state(b)[1];
+    unsafe { b3Glue_DestroyWorld(w) };
+    (y - 0.5).abs() < 0.05
+}
+
+fn ball_rests_on_mesh() -> bool {
+    // two triangles, 20 x 20, facing up
+    let v = [[0.0, 0.0, 0.0], [0.0, 0.0, 20.0], [20.0, 0.0, 0.0], [20.0, 0.0, 20.0]];
+    let idx = [0, 1, 2, 2, 1, 3];
+    ball_rests_on(|g| shapes::add_mesh(g, &v, &idx, [1.0; 3], &ShapeParams::default()))
+}
+
+fn ball_rests_on_heightfield() -> bool {
+    // 6 x 6 grid points, 4 m apart (20 m), flat at height 0
+    let h = [0.0f32; 36];
+    ball_rests_on(|g| shapes::add_heightfield(g, &h, 6, 6, [4.0, 1.0, 4.0], -1.0, 1.0, &ShapeParams::default()))
+}
+
+fn bad_terrain_is_rejected() -> bool {
+    let w = shape_world();
+    let g = shape_body(w, BODY_STATIC, [0.0; 3], [0.0; 3]);
+    let ok = shapes::add_mesh(g, &[[0.0; 3]; 2], &[0, 1, 1], [1.0; 3], &ShapeParams::default()).is_none()
+        && shapes::add_heightfield(g, &[0.0; 3], 2, 2, [1.0; 3], -1.0, 1.0, &ShapeParams::default()).is_none();
+    unsafe { b3Glue_DestroyWorld(w) };
+    ok
+}
+
 /// Runs every shapes check. 0 when all hold, else 10 + the index of the first that fails.
 #[no_mangle]
 pub extern "C" fn run_shapes() -> i32 {
-    let checks: [fn() -> bool; 9] = [
+    let checks: [fn() -> bool; 12] = [
         hull_rests_on_floor,
         offset_rotated_box_is_where_it_should_be,
         compound_mass_is_sum,
@@ -307,6 +393,9 @@ pub extern "C" fn run_shapes() -> i32 {
         sensor_passes_through_but_reports,
         contact_events_flag_gates_events,
         user_material_round_trips,
+        ball_rests_on_mesh,
+        ball_rests_on_heightfield,
+        bad_terrain_is_rejected,
     ];
     for (i, check) in checks.iter().enumerate() {
         if !check() {
@@ -327,12 +416,6 @@ mod joint_checks {
 
     const DT: f32 = 1.0 / 60.0;
     const IDENT: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-
-    // Parallel test threads crashed the native test binary when they built worlds at once, so the tests take turns.
-    fn serial() -> std::sync::MutexGuard<'static, ()> {
-        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        LOCK.lock().unwrap_or_else(|e| e.into_inner())
-    }
 
     fn world(gy: f32) -> World {
         unsafe { b3Glue_CreateWorld(0.0, gy, 0.0, 0, 0) }
@@ -381,7 +464,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn distance_rod_keeps_length_and_swings() {
-        let _s = serial();
         let w = world(-10.0);
         let anchor = body(w, BODY_STATIC, [0.0, 10.0, 0.0], IDENT, [0.0; 6]);
         let bob = body(w, BODY_DYNAMIC, [1.0, 10.0, 0.0], IDENT, [0.0; 6]);
@@ -398,7 +480,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn distance_rod_reaction_holds_weight() {
-        let _s = serial();
         let w = world(-10.0);
         let anchor = body(w, BODY_STATIC, [0.0, 10.0, 0.0], IDENT, [0.0; 6]);
         let bob = body(w, BODY_DYNAMIC, [0.0, 9.0, 0.0], IDENT, [0.0; 6]);
@@ -413,7 +494,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn distance_spring_oscillates_about_rest_length() {
-        let _s = serial();
         let w = world(0.0);
         let anchor = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
         let bob = body(w, BODY_DYNAMIC, [1.5, 0.0, 0.0], IDENT, [0.0; 6]);
@@ -439,7 +519,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn distance_length_limit_stops_outward_motion() {
-        let _s = serial();
         let w = world(0.0);
         let anchor = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
         let bob = body(w, BODY_DYNAMIC, [1.0, 0.0, 0.0], IDENT, [2.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -459,7 +538,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn distance_motor_pulls_length_at_speed() {
-        let _s = serial();
         let w = world(0.0);
         let anchor = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
         let bob = body(w, BODY_DYNAMIC, [1.0, 0.0, 0.0], IDENT, [0.0; 6]);
@@ -474,7 +552,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn motor_joint_reaches_target_velocity() {
-        let _s = serial();
         let w = world(0.0);
         let anchor = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
         let b = body(w, BODY_DYNAMIC, [0.0; 3], IDENT, [0.0; 6]);
@@ -489,7 +566,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn motor_joint_spring_returns_to_target() {
-        let _s = serial();
         let w = world(0.0);
         let anchor = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
         let b = body(w, BODY_DYNAMIC, [0.5, 0.0, 0.0], IDENT, [0.0; 6]);
@@ -507,8 +583,7 @@ mod joint_checks {
     pub fn filter_joint_lets_bodies_pass_through() {
         // Same drop twice: with a filter joint the ball falls through the box, without one it rests on top.
         let fall = |filter: bool| -> f32 {
-            let _s = serial();
-            let w = world(-10.0);
+                let w = world(-10.0);
             let ground = body(w, BODY_STATIC, [0.0, -1.0, 0.0], IDENT, [0.0; 6]);
             unsafe { b3Glue_AddBox(ground, 50.0, 1.0, 50.0, 1.0, 0.5, 0.0, 0) };
             let ball_b = body(w, BODY_DYNAMIC, [0.0, 0.4, 0.0], IDENT, [0.0; 6]);
@@ -529,7 +604,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn spherical_cone_limit_holds() {
-        let _s = serial();
         let w = world(0.0);
         let anchor = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
         // Body B spins about y: its frame z tilts away from frame A z at 5 rad/s, the cone of 0.3 rad must stop it.
@@ -549,7 +623,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn spherical_twist_limit_holds() {
-        let _s = serial();
         let w = world(0.0);
         let anchor = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
         // Spin about frame z (the twist axis): the twist limit of +-0.3 rad must stop it.
@@ -569,7 +642,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn spherical_spring_returns_to_target_rotation() {
-        let _s = serial();
         let w = world(0.0);
         let anchor = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
         // Start rotated 0.5 rad about z; the spring pulls back to the identity target.
@@ -592,7 +664,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn spherical_motor_reaches_target_velocity() {
-        let _s = serial();
         let w = world(0.0);
         let anchor = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
         let b = body(w, BODY_DYNAMIC, [0.0; 3], IDENT, [0.0; 6]);
@@ -606,7 +677,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn wheel_spin_motor_reaches_speed() {
-        let _s = serial();
         let w = world(0.0);
         let chassis = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
         let wheel = body(w, BODY_DYNAMIC, [0.0; 3], IDENT, [0.0; 6]);
@@ -622,7 +692,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn wheel_suspension_limit_stops_fall() {
-        let _s = serial();
         let w = world(-10.0);
         let chassis = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
         let wheel = body(w, BODY_DYNAMIC, [0.0; 3], IDENT, [0.0; 6]);
@@ -638,7 +707,6 @@ mod joint_checks {
 
     #[cfg_attr(test, test)]
     pub fn wheel_steering_reaches_target_angle() {
-        let _s = serial();
         let w = world(0.0);
         let chassis = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
         let wheel = body(w, BODY_DYNAMIC, [0.0; 3], IDENT, [0.0; 6]);
@@ -648,6 +716,43 @@ mod joint_checks {
         step(w, 120);
         let angle = wheel_state(j)[1];
         assert!(near(angle, 0.4, 0.02), "steering angle {angle}, want 0.4 rad");
+    }
+
+    #[cfg_attr(test, test)]
+    pub fn revolute_spring_settles_at_rest_angle() {
+        let w = world(0.0);
+        let base = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
+        let arm = body(w, BODY_DYNAMIC, [0.0; 3], IDENT, [0.0; 6]);
+        ball(arm, 0.5);
+        let j = unsafe { b3Glue_CreateRevolute(w, base, arm, [0.0f32; 3].as_ptr(), [0.0f32; 3].as_ptr(), [0.0f32, 0.0, 1.0].as_ptr(), 0, 0.0, 0.0) };
+        revolute_set_spring(j, true, 4.0, 0.7, 0.5);
+        step(w, 180);
+        let angle = revolute_angle(j);
+        assert!(near(angle, 0.5, 0.02), "hinge angle {angle}, want the 0.5 rad rest angle");
+        // Spring off: the rest angle no longer pulls, the motor takes over.
+        revolute_set_spring(j, false, 0.0, 0.0, 0.0);
+        revolute_set_motor(j, true, 2.0, 1.0e3);
+        step(w, 30);
+        let spin = ang_vel(arm)[2];
+        assert!(near(spin, 2.0, 0.1), "motor spin {spin}, want 2 rad/s");
+    }
+
+    #[cfg_attr(test, test)]
+    pub fn prismatic_spring_settles_at_rest_translation() {
+        let w = world(0.0);
+        let rail = body(w, BODY_STATIC, [0.0; 3], IDENT, [0.0; 6]);
+        let slider = body(w, BODY_DYNAMIC, [0.0; 3], IDENT, [0.0; 6]);
+        ball(slider, 0.5);
+        let j = unsafe { b3Glue_CreatePrismatic(w, rail, slider, [0.0f32; 3].as_ptr(), [0.0f32; 3].as_ptr(), [1.0f32, 0.0, 0.0].as_ptr(), 0, 0.0, 0.0) };
+        prismatic_set_spring(j, true, 4.0, 0.7, 0.8);
+        step(w, 180);
+        let t = prismatic_translation(j);
+        assert!(near(t, 0.8, 0.02), "slider at {t}, want the 0.8 m rest translation");
+        prismatic_set_spring(j, false, 0.0, 0.0, 0.0);
+        prismatic_set_motor(j, true, 1.5, 1.0e4);
+        step(w, 30);
+        let v = lin_vel(slider)[0];
+        assert!(near(v, 1.5, 0.1), "motor speed {v}, want 1.5 m/s");
     }
 }
 
@@ -670,6 +775,8 @@ pub extern "C" fn run_joints() -> i32 {
     wheel_spin_motor_reaches_speed();
     wheel_suspension_limit_stops_fall();
     wheel_steering_reaches_target_angle();
+    revolute_spring_settles_at_rest_angle();
+    prismatic_spring_settles_at_rest_translation();
     0
 }
 
@@ -710,7 +817,7 @@ fn query_scene() -> QueryScene {
     }
 }
 
-/// Runs the query checks on a fixed scene. Returns 0 when all hold, else a code 101..=137 naming the failed check.
+/// Runs the query checks on a fixed scene. Returns 0 when all hold, else a code 101..=140 naming the failed check.
 #[no_mangle]
 pub extern "C" fn run_queries() -> i32 {
     let s = query_scene();
@@ -828,6 +935,20 @@ pub extern "C" fn run_queries() -> i32 {
     }
     if !near(q::cast_mover(w, [-30.0, 3.0, 0.0], low, [0.0, -10.0, 0.0], Some(s.ground)), 1.0, 1e-6) {
         return 135;
+    }
+
+    // Box mover: stops at the box shape's face (x = 9, box front at 0.5), ignores it when it is `self`, and a turned box
+    // (45 degrees about y) reaches further sideways, so it stops sooner.
+    let (f, n) = q::cast_box_mover(w, [0.0, 3.0, 0.0], [0.5; 3], [0.0, 0.0, 0.0, 1.0], [20.0, 0.0, 0.0], None);
+    if !near(f, 0.425, 1e-3) || n[0] > -0.9 {
+        return 138;
+    }
+    if !near(q::cast_box_mover(w, [0.0, 3.0, 0.0], [0.5; 3], [0.0, 0.0, 0.0, 1.0], [20.0, 0.0, 0.0], Some(s.boxed)).0, 1.0, 1e-6) {
+        return 139;
+    }
+    let turned = [0.0, core::f32::consts::FRAC_PI_8.sin(), 0.0, core::f32::consts::FRAC_PI_8.cos()];
+    if !(q::cast_box_mover(w, [0.0, 3.0, 0.0], [0.5; 3], turned, [20.0, 0.0, 0.0], None).0 < f - 0.005) {
+        return 140;
     }
 
     unsafe { b3Glue_DestroyWorld(w) };

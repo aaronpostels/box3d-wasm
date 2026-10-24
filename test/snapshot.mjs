@@ -46,4 +46,24 @@ new BigUint64Array(m.HEAPU8.buffer, idArr, ids.length).set(rids);
 run(restored, 100);
 const again = state();
 assert.deepEqual(again, original, "restored world diverged");
+
+// In-place reset (b3Glue_RestoreInPlace): same world id and body ids afterwards, and the same 100 steps again.
+// Part 1 runs in the Rust smoke module (always); part 2 runs on the Emscripten dist once it is built with the new glue.
+{
+  const { readFileSync } = await import("node:fs");
+  const wasm = new URL("../crates/box3d-smoke/target/wasm32-unknown-unknown/release/box3d_smoke.wasm", import.meta.url);
+  const { run_restore_in_place } = new WebAssembly.Instance(new WebAssembly.Module(readFileSync(wasm)), {}).exports;
+  assert.equal(run_restore_in_place(), 0, "smoke: restore in place failed");
+}
+if (typeof m._b3Glue_RestoreInPlace === "function") {
+  assert.equal(m._b3Glue_RestoreInPlace(player), true, "restoreInPlace");
+  assert.equal(m._b3Glue_RestoreWorld(player), restored, "world id must not change");
+  const back = [];
+  for (let i = 1; i < n; i++) back.push(m._b3Glue_RestoreBodyId(player, i));
+  assert.deepEqual(back, rids, "body ids come back in the same order");
+  run(restored, 100);
+  assert.deepEqual(state(), again, "100 steps after the in-place reset differ");
+} else {
+  console.log("skip dist in-place check: dist lacks b3Glue_RestoreInPlace (rebuild with npm run build:wasm)");
+}
 console.log(`ok snapshot: ${bytes.length} bytes, ${ids.length} bodies, 100 steps after restore are identical`);

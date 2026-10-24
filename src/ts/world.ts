@@ -18,6 +18,7 @@ import {
     ShapeHit,
     ShapeMaterialOptions,
     BoxTransformedShapeOptions,
+    TerrainShapeOptions,
     ProxyShape,
     MoverCapsule,
     MoverPlane,
@@ -26,6 +27,9 @@ import {
     MassData,
     JointOptions,
     WheelJointOptions,
+    AxisJointOptions,
+    AxisJointSpring,
+    AxisJointMotor,
     JointReaction,
     DistanceSpring,
     DistanceLengthRange,
@@ -424,6 +428,49 @@ export class Box3DWorld {
         });
     }
 
+    /**
+     * Triangle mesh on a static body: vertices (x y z each), indices (3 per triangle, counter-clockwise seen from the
+     * solid side's outside). Null when Box3D rejects the mesh. The wasm side owns the mesh data and frees it with the shape or world.
+     */
+    public createMesh(bodyId: BodyId, vertices: ArrayLike<number>, indices: ArrayLike<number>, options: TerrainShapeOptions = {}): ShapeId | null {
+        this.checkDestroyed();
+        const vertexCount = Box3DWorld.pointCount(vertices);
+        if (indices.length === 0 || indices.length % 3 !== 0) throw new Error("Box3DWorld.createMesh: indices must hold 3 per triangle.");
+        return this.withTemp([vertexCount * 12, indices.length * 4, 12], ([vPtr, iPtr, sPtr]) => {
+            this.writeF32(vPtr, vertices);
+            this.wasm.HEAP32.set(Int32Array.from(indices), iPtr >>> 2);
+            this.writeF32(sPtr, options.scale ?? [1, 1, 1]);
+            const id = this.wasm._b3Glue_AddMesh(
+                bodyId, vPtr, vertexCount, iPtr, indices.length / 3, sPtr,
+                options.friction ?? 0.6, options.restitution ?? 0.0, options.userMaterial ?? 0n, Box3DWorld.shapeFlags(options)
+            );
+            return id === 0n ? null : id;
+        });
+    }
+
+    /**
+     * Height field on a static body: countX * countZ heights, index = z * countX + x; grid spacing and height scale in
+     * options.scale. Heights are clamped to [minHeight, maxHeight] (default: the data range). Null when Box3D rejects the data.
+     */
+    public createHeightfield(bodyId: BodyId, heights: ArrayLike<number>, countX: number, countZ: number, options: TerrainShapeOptions & { minHeight?: number; maxHeight?: number } = {}): ShapeId | null {
+        this.checkDestroyed();
+        if (!Number.isInteger(countX) || !Number.isInteger(countZ) || countX < 2 || countZ < 2 || heights.length !== countX * countZ) {
+            throw new Error("Box3DWorld.createHeightfield: need integer counts of at least 2 and countX * countZ heights.");
+        }
+        let lo = Infinity, hi = -Infinity;
+        for (let i = 0; i < heights.length; ++i) { lo = Math.min(lo, heights[i]); hi = Math.max(hi, heights[i]); }
+        if (hi <= lo) hi = lo + 1; // a flat field needs a non-empty range to quantize
+        return this.withTemp([heights.length * 4, 12], ([hPtr, sPtr]) => {
+            this.writeF32(hPtr, heights);
+            this.writeF32(sPtr, options.scale ?? [1, 1, 1]);
+            const id = this.wasm._b3Glue_AddHeightfield(
+                bodyId, hPtr, countX, countZ, sPtr, options.minHeight ?? lo, options.maxHeight ?? hi,
+                options.friction ?? 0.6, options.restitution ?? 0.0, options.userMaterial ?? 0n, Box3DWorld.shapeFlags(options)
+            );
+            return id === 0n ? null : id;
+        });
+    }
+
     /** The user material id the shape was made with (0n when none). */
     public getShapeUserMaterial(shapeId: ShapeId): bigint {
         this.checkDestroyed();
@@ -454,6 +501,55 @@ export class Box3DWorld {
         this.checkDestroyed();
         return this.withAnchors(options, options.axis, (a, b, axis) =>
             this.wasm._b3Glue_CreateWheel(this.worldId, bodyA, bodyB, a, b, axis));
+    }
+
+    /** Hinge about options.axis (body A frame). Optional limits in radians. */
+    public createRevoluteJoint(bodyA: BodyId, bodyB: BodyId, options: AxisJointOptions): JointId {
+        this.checkDestroyed();
+        const [lo, hi] = options.limits ?? [0, 0];
+        return this.withAnchors(options, options.axis, (a, b, axis) =>
+            this.wasm._b3Glue_CreateRevolute(this.worldId, bodyA, bodyB, a, b, axis, options.limits ? 1 : 0, lo, hi));
+    }
+
+    /** Slider along options.axis (body A frame). Optional limits in meters. */
+    public createPrismaticJoint(bodyA: BodyId, bodyB: BodyId, options: AxisJointOptions): JointId {
+        this.checkDestroyed();
+        const [lo, hi] = options.limits ?? [0, 0];
+        return this.withAnchors(options, options.axis, (a, b, axis) =>
+            this.wasm._b3Glue_CreatePrismatic(this.worldId, bodyA, bodyB, a, b, axis, options.limits ? 1 : 0, lo, hi));
+    }
+
+    /** Spring that pulls the hinge to a rest angle (radians). */
+    public setRevoluteSpring(joint: JointId, s: AxisJointSpring): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_RevoluteSetSpring(joint, s.enable ? 1 : 0, s.hertz, s.dampingRatio, s.target);
+    }
+
+    /** Motor that spins the hinge at speed rad/s with at most maxForce (a torque). */
+    public setRevoluteMotor(joint: JointId, m: AxisJointMotor): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_RevoluteSetMotor(joint, m.enable ? 1 : 0, m.speed, m.maxForce);
+    }
+
+    public getRevoluteAngle(joint: JointId): number {
+        this.checkDestroyed();
+        return this.wasm._b3Glue_RevoluteAngle(joint);
+    }
+
+    /** Spring that pulls the slider to a rest translation (meters). */
+    public setPrismaticSpring(joint: JointId, s: AxisJointSpring): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_PrismaticSetSpring(joint, s.enable ? 1 : 0, s.hertz, s.dampingRatio, s.target);
+    }
+
+    public setPrismaticMotor(joint: JointId, m: AxisJointMotor): void {
+        this.checkDestroyed();
+        this.wasm._b3Glue_PrismaticSetMotor(joint, m.enable ? 1 : 0, m.speed, m.maxForce);
+    }
+
+    public getPrismaticTranslation(joint: JointId): number {
+        this.checkDestroyed();
+        return this.wasm._b3Glue_PrismaticTranslation(joint);
     }
 
     /** Motor joint: drives body B's velocity relative to body A (see setMotorVelocity). */
@@ -676,6 +772,22 @@ export class Box3DWorld {
             this.writeF32(capsulePtr, [...capsule.center1, ...capsule.center2, capsule.radius]);
             this.writeF32(deltaPtr, translation);
             return this.wasm._b3Glue_CastMover(this.worldId, originPtr, capsulePtr, deltaPtr, self ?? 0n);
+        });
+    }
+
+    /**
+     * Fraction (0..1) of translation an oriented box travels before it hits something, and the hit normal (zero when
+     * clear). Box3D's mover query is capsule only, so this is a plain shape cast: it stops at the first hit and does not slide.
+     */
+    public castBoxMover(origin: Vec3Tuple, halfExtents: Vec3Tuple, translation: Vec3Tuple, rotation: QuatTuple = [0, 0, 0, 1], self?: ShapeId): { fraction: number; normal: Vec3Tuple } {
+        this.checkDestroyed();
+        return this.withTemp([12, 12, 16, 12, 12], ([originPtr, halfPtr, quatPtr, deltaPtr, normalPtr]) => {
+            this.writeF32(originPtr, origin);
+            this.writeF32(halfPtr, halfExtents);
+            this.writeF32(quatPtr, rotation);
+            this.writeF32(deltaPtr, translation);
+            const fraction = this.wasm._b3Glue_CastBoxMover(this.worldId, originPtr, halfPtr, quatPtr, deltaPtr, self ?? 0n, normalPtr);
+            return { fraction, normal: vec3At(this.readF32(normalPtr, 3), 0) };
         });
     }
 

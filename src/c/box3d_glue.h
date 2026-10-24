@@ -94,6 +94,7 @@ B3_GLUE_EXPORT uint32_t b3Glue_RestoreWorld(b3RecPlayer* p);
 B3_GLUE_EXPORT int b3Glue_RestoreBodyCount(const b3RecPlayer* p);
 B3_GLUE_EXPORT uint64_t b3Glue_RestoreBodyId(const b3RecPlayer* p, int i);
 B3_GLUE_EXPORT void b3Glue_RestoreDestroy(b3RecPlayer* p);
+B3_GLUE_EXPORT bool b3Glue_RestoreInPlace(b3RecPlayer* p);
 
 #ifdef __cplusplus
 }

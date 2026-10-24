@@ -17,7 +17,7 @@ if (built.length > 0) {
 }
 
 const { default: factory } = await import("../dist/box3d.js");
-const { Box3DWorld, BodyType, initBox3D } = await import("../dist/index.js");
+const { Box3DWorld, Box3DSnapshotPlayer, takeSnapshot, BodyType, initBox3D } = await import("../dist/index.js");
 const wasm = await initBox3D(factory);
 
 const DT = 1 / 60;
@@ -668,6 +668,104 @@ test("damping, gravity scale, motion locks, mass data, user data, enable and dis
         assert.throws(() => w.applyImpulses([a, c], [1, 0, 0]), RangeError);
         w.destroy();
     }
+});
+
+// Tests of glue added after the first dist builds: skipped while the dist lacks the export (rebuild with npm run build:wasm).
+const testIf = (exportName, name, fn) => {
+    if (typeof wasm[exportName] === "function") test(name, fn);
+    else console.log(`skip ${name}: dist lacks ${exportName}`);
+};
+
+testIf("_b3Glue_AddMesh", "ball rests on a triangle mesh and on a height field; bad data is rejected", () => {
+    for (const make of [
+        (w, g) => w.createMesh(g, [0, 0, 0, 0, 0, 20, 20, 0, 0, 20, 0, 20], [0, 1, 2, 2, 1, 3]),
+        (w, g) => w.createHeightfield(g, new Float32Array(36), 6, 6, { scale: [4, 1, 4], minHeight: -1, maxHeight: 1 }),
+    ]) {
+        const w = newWorld(-10);
+        const g = w.createBody({ type: BodyType.Static, position: [-10, 0, -10] });
+        assert.notEqual(make(w, g), null);
+        const b = ball(w, [0, 2, 0]).b;
+        stepN(w, 180);
+        assert.ok(near(pos(w, b)[1], 0.5, 0.05), `ball y ${pos(w, b)[1]}`);
+        w.destroy(); // frees the mesh data with the world
+    }
+    const w = newWorld(-10);
+    const g = w.createBody({ type: BodyType.Static });
+    assert.equal(w.createMesh(g, [0, 0, 0, 1, 0, 0], [0, 1, 1]), null);
+    assert.throws(() => w.createHeightfield(g, [0, 0, 0], 2, 2), Error);
+    w.destroy();
+});
+
+testIf("_b3Glue_CastBoxMover", "box mover stops at a wall and ignores self", () => {
+    const w = newWorld(0);
+    const wallBody = w.createBody({ type: BodyType.Static, position: [10, 3, 0] });
+    const wall = w.createBoxShape(wallBody, { halfWidth: 1, halfHeight: 1, halfDepth: 1, density: 1, friction: 0.5, restitution: 0 });
+    const hit = w.castBoxMover([0, 3, 0], [0.5, 0.5, 0.5], [20, 0, 0]);
+    assert.ok(near(hit.fraction, 0.425, 1e-3), `fraction ${hit.fraction}`);
+    assert.ok(hit.normal[0] < -0.9, `normal ${hit.normal}`);
+    assert.equal(w.castBoxMover([0, 3, 0], [0.5, 0.5, 0.5], [20, 0, 0], IDENT, wall).fraction, 1);
+    w.destroy();
+});
+
+testIf("_b3Glue_RevoluteSetSpring", "revolute and prismatic springs settle at the rest value, motors reach speed", () => {
+    {
+        const w = newWorld(0);
+        const base = w.createBody({ type: BodyType.Static });
+        const arm = ball(w, [0, 0, 0]).b;
+        const j = w.createRevoluteJoint(base, arm, { axis: [0, 0, 1] });
+        w.setRevoluteSpring(j, { enable: true, hertz: 4, dampingRatio: 0.7, target: 0.5 });
+        stepN(w, 180);
+        assert.ok(near(w.getRevoluteAngle(j), 0.5, 0.02), `angle ${w.getRevoluteAngle(j)}`);
+        w.setRevoluteSpring(j, { enable: false, hertz: 0, dampingRatio: 0, target: 0 });
+        w.setRevoluteMotor(j, { enable: true, speed: 2, maxForce: 1e3 });
+        stepN(w, 30);
+        assert.ok(near(angVel(w, arm)[2], 2, 0.1), `spin ${angVel(w, arm)}`);
+        w.destroy();
+    }
+    {
+        const w = newWorld(0);
+        const rail = w.createBody({ type: BodyType.Static });
+        const slider = ball(w, [0, 0, 0]).b;
+        const j = w.createPrismaticJoint(rail, slider, { axis: [1, 0, 0] });
+        w.setPrismaticSpring(j, { enable: true, hertz: 4, dampingRatio: 0.7, target: 0.8 });
+        stepN(w, 180);
+        assert.ok(near(w.getPrismaticTranslation(j), 0.8, 0.02), `translation ${w.getPrismaticTranslation(j)}`);
+        w.setPrismaticSpring(j, { enable: false, hertz: 0, dampingRatio: 0, target: 0 });
+        w.setPrismaticMotor(j, { enable: true, speed: 1.5, maxForce: 1e4 });
+        stepN(w, 30);
+        assert.ok(near(linVel(w, slider)[0], 1.5, 0.1), `speed ${linVel(w, slider)}`);
+        w.destroy();
+    }
+});
+
+testIf("_b3Glue_RestoreInPlace", "snapshot player resets in place with the same world and body ids", () => {
+    const w = newWorld(-10);
+    floor(w, 0);
+    ball(w, [0, 3, 0]);
+    stepN(w, 30);
+    const bytes = takeSnapshot(wasm, w.id);
+    const p = new Box3DSnapshotPlayer(wasm, bytes);
+    const ids = p.bodyIds();
+    const rw = p.worldId;
+    // Batch state (13 floats per body) of the restored world, read through the raw module.
+    const state = () => {
+        const idp = wasm._malloc(8 * ids.length), out = wasm._malloc(4 * 13 * ids.length);
+        new BigUint64Array(wasm.HEAPU8.buffer, idp, ids.length).set(ids);
+        wasm._b3Glue_GetBatchState(idp, ids.length, out);
+        const r = Array.from(new Float32Array(wasm.HEAPU8.buffer, out, 13 * ids.length));
+        wasm._free(idp);
+        wasm._free(out);
+        return r;
+    };
+    const before = state();
+    for (let i = 0; i < 60; i++) p.step(DT, 4);
+    assert.notDeepEqual(state(), before, "the world moved");
+    assert.equal(p.restoreInPlace(), true);
+    assert.equal(p.worldId, rw);
+    assert.deepEqual(p.bodyIds(), ids);
+    assert.deepEqual(state(), before);
+    p.destroy();
+    w.destroy();
 });
 
 for (const [name, fn] of tests) {

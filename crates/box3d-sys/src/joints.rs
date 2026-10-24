@@ -33,6 +33,13 @@ extern "C" {
     pub fn b3Glue_WheelSetSpin(joint: Joint, enable: i32, speed: f32, max_torque: f32);
     pub fn b3Glue_WheelSetSteering(joint: Joint, enable: i32, hertz: f32, damping_ratio: f32, target_angle: f32, max_torque: f32, enable_limit: i32, lower: f32, upper: f32);
     pub fn b3Glue_WheelState(joint: Joint, out3: *mut f32);
+
+    pub fn b3Glue_RevoluteSetSpring(joint: Joint, enable: i32, hertz: f32, damping_ratio: f32, target_angle: f32);
+    pub fn b3Glue_RevoluteSetMotor(joint: Joint, enable: i32, speed: f32, max_torque: f32);
+    pub fn b3Glue_RevoluteAngle(joint: Joint) -> f32;
+    pub fn b3Glue_PrismaticSetSpring(joint: Joint, enable: i32, hertz: f32, damping_ratio: f32, target_translation: f32);
+    pub fn b3Glue_PrismaticSetMotor(joint: Joint, enable: i32, speed: f32, max_force: f32);
+    pub fn b3Glue_PrismaticTranslation(joint: Joint) -> f32;
 }
 
 /// A joint's reaction at its anchor after the last step: force xyz, then torque xyz.
@@ -142,4 +149,30 @@ pub fn wheel_state(joint: Joint) -> [f32; 3] {
     let mut out = [0.0f32; 3];
     unsafe { b3Glue_WheelState(joint, out.as_mut_ptr()) };
     out
+}
+
+/// Pulls the hinge angle (radians) to `target_angle`.
+pub fn revolute_set_spring(joint: Joint, spring: bool, hertz: f32, damping_ratio: f32, target_angle: f32) {
+    unsafe { b3Glue_RevoluteSetSpring(joint, spring as i32, hertz, damping_ratio, target_angle) }
+}
+
+pub fn revolute_set_motor(joint: Joint, motor: bool, speed: f32, max_torque: f32) {
+    unsafe { b3Glue_RevoluteSetMotor(joint, motor as i32, speed, max_torque) }
+}
+
+pub fn revolute_angle(joint: Joint) -> f32 {
+    unsafe { b3Glue_RevoluteAngle(joint) }
+}
+
+/// Pulls the slider to `target_translation` meters along its axis.
+pub fn prismatic_set_spring(joint: Joint, spring: bool, hertz: f32, damping_ratio: f32, target_translation: f32) {
+    unsafe { b3Glue_PrismaticSetSpring(joint, spring as i32, hertz, damping_ratio, target_translation) }
+}
+
+pub fn prismatic_set_motor(joint: Joint, motor: bool, speed: f32, max_force: f32) {
+    unsafe { b3Glue_PrismaticSetMotor(joint, motor as i32, speed, max_force) }
+}
+
+pub fn prismatic_translation(joint: Joint) -> f32 {
+    unsafe { b3Glue_PrismaticTranslation(joint) }
 }

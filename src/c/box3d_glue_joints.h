@@ -50,6 +50,16 @@ B3_GLUE_EXPORT void b3Glue_WheelSetSteering(uint64_t joint, int enable, float he
 // out3: spin speed, steering angle, spin torque.
 B3_GLUE_EXPORT void b3Glue_WheelState(uint64_t joint, float* out3);
 
+// Revolute (made by b3Glue_CreateRevolute). Spring: pulls the hinge angle (radians) to targetAngle. Motor: spins at speed (rad/s).
+B3_GLUE_EXPORT void b3Glue_RevoluteSetSpring(uint64_t joint, int enable, float hertz, float dampingRatio, float targetAngle);
+B3_GLUE_EXPORT void b3Glue_RevoluteSetMotor(uint64_t joint, int enable, float speed, float maxTorque);
+B3_GLUE_EXPORT float b3Glue_RevoluteAngle(uint64_t joint);
+
+// Prismatic (made by b3Glue_CreatePrismatic). Spring: pulls the slider to targetTranslation (meters). Motor: moves at speed (m/s).
+B3_GLUE_EXPORT void b3Glue_PrismaticSetSpring(uint64_t joint, int enable, float hertz, float dampingRatio, float targetTranslation);
+B3_GLUE_EXPORT void b3Glue_PrismaticSetMotor(uint64_t joint, int enable, float speed, float maxForce);
+B3_GLUE_EXPORT float b3Glue_PrismaticTranslation(uint64_t joint);
+
 #ifdef __cplusplus
 }
 #endif

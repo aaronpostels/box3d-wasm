@@ -5,6 +5,7 @@ import { Box3DWorld } from "./world.js";
 
 export * from "./types.js";
 export * from "./world.js";
+export * from "./snapshot.js";
 
 export type Box3DModuleFactory = (options?: Record<string, unknown>) => Promise<RawBox3DModule>;
 

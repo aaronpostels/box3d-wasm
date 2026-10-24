@@ -2,6 +2,8 @@
 // Box3D WebAssembly High-Performance Glue Implementation
 
 #include "box3d_glue.h"
+#include "box3d_glue_shapes.h"
+#include <stdatomic.h>
 #include <string.h>
 
 static inline b3WorldId unpackWorldId(uint32_t val) {
@@ -28,17 +30,30 @@ static inline uint64_t packShapeId(b3ShapeId id) {
     return b3StoreShapeId(id);
 }
 
+// Box3D keeps its worlds in a global table that create and destroy update without a lock, so two threads that build worlds at
+// once corrupt it (a native test binary crashed with exit 0x80000003). A world is made once per scene, so a spin lock around
+// create and destroy costs nothing. Stepping different worlds on different threads stays free. On a wasm build without
+// threads the lock is never contended.
+static atomic_flag worldTableLock = ATOMIC_FLAG_INIT;
+static void lockWorldTable(void) { while (atomic_flag_test_and_set_explicit(&worldTableLock, memory_order_acquire)) {} }
+static void unlockWorldTable(void) { atomic_flag_clear_explicit(&worldTableLock, memory_order_release); }
+
 uint32_t b3Glue_CreateWorld(float gx, float gy, float gz, int enableSleep, int enableContinuous) {
     b3WorldDef def = b3DefaultWorldDef();
     def.gravity = (b3Vec3){ gx, gy, gz };
     def.enableSleep = enableSleep != 0;
     def.enableContinuous = enableContinuous != 0;
+    lockWorldTable();
     b3WorldId worldId = b3CreateWorld(&def);
+    unlockWorldTable();
     return packWorldId(worldId);
 }
 
 void b3Glue_DestroyWorld(uint32_t worldIdRaw) {
+    lockWorldTable();
     b3DestroyWorld(unpackWorldId(worldIdRaw));
+    unlockWorldTable();
+    b3Glue_ReleaseWorldData(worldIdRaw);
 }
 
 void b3Glue_Step(uint32_t worldIdRaw, float timeStep, int subStepCount) {
@@ -109,6 +124,7 @@ uint64_t b3Glue_CreateCapsuleShape(uint64_t bodyIdRaw, float radius, float halfH
 
 void b3Glue_DestroyShape(uint64_t shapeIdRaw, bool updateBodyMass) {
     b3DestroyShape(unpackShapeId(shapeIdRaw), updateBodyMass);
+    b3Glue_ReleaseShapeData(shapeIdRaw);
 }
 
 void b3Glue_GetTransform(uint64_t bodyIdRaw, float* out7) {

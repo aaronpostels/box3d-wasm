@@ -8,6 +8,9 @@ extern "C" {
     /// `half3` are half extents, `center3` the box centre in the body frame, `quat4` its rotation (x y z w).
     pub fn b3Glue_AddBoxTransformed(body: Body, half3: *const f32, center3: *const f32, quat4: *const f32, density: f32, friction: f32, restitution: f32, user_material: u64, flags: i32) -> Shape;
     pub fn b3Glue_ShapeUserMaterial(shape: Shape) -> u64;
+    /// `scale3` may be null (1 1 1). Static bodies only. The glue owns the mesh data and frees it with the shape or world.
+    pub fn b3Glue_AddMesh(body: Body, vertices: *const f32, vertex_count: i32, indices: *const i32, triangle_count: i32, scale3: *const f32, friction: f32, restitution: f32, user_material: u64, flags: i32) -> Shape;
+    pub fn b3Glue_AddHeightfield(body: Body, heights: *const f32, count_x: i32, count_z: i32, scale3: *const f32, min_height: f32, max_height: f32, friction: f32, restitution: f32, user_material: u64, flags: i32) -> Shape;
 }
 
 /// Material and flags of one shape.
@@ -68,4 +71,25 @@ pub fn add_box_transformed(body: Body, half: [f32; 3], center: [f32; 3], rotatio
 /// The user material the shape was made with.
 pub fn user_material(shape: Shape) -> u64 {
     unsafe { b3Glue_ShapeUserMaterial(shape) }
+}
+
+/// Adds a triangle mesh (CCW triangles, `indices` 3 per triangle) to a static `body`. None when Box3D rejects the mesh.
+/// Density is ignored: meshes have no mass.
+pub fn add_mesh(body: Body, vertices: &[[f32; 3]], indices: &[i32], scale: [f32; 3], p: &ShapeParams) -> Option<Shape> {
+    let shape = unsafe {
+        b3Glue_AddMesh(body, vertices.as_ptr() as *const f32, vertices.len() as i32, indices.as_ptr(), (indices.len() / 3) as i32, scale.as_ptr(), p.friction, p.restitution, p.user_material, p.flags())
+    };
+    (shape != 0).then_some(shape)
+}
+
+/// Adds a height field to a static `body`: `count_x` * `count_z` heights (index = z * count_x + x), grid spacing and
+/// vertical scale in `scale`, heights clamped to `min_height..max_height`. None when Box3D rejects the data.
+pub fn add_heightfield(body: Body, heights: &[f32], count_x: i32, count_z: i32, scale: [f32; 3], min_height: f32, max_height: f32, p: &ShapeParams) -> Option<Shape> {
+    if heights.len() != (count_x * count_z) as usize {
+        return None;
+    }
+    let shape = unsafe {
+        b3Glue_AddHeightfield(body, heights.as_ptr(), count_x, count_z, scale.as_ptr(), min_height, max_height, p.friction, p.restitution, p.user_material, p.flags())
+    };
+    (shape != 0).then_some(shape)
 }

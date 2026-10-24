@@ -40,3 +40,9 @@ B3_GLUE_EXPORT int b3Glue_CollideMover(uint32_t world, const float* origin3, con
 // Fraction (0..1) of delta3 that the capsule travels from origin3 before it hits something. Box3D's mover cast slides
 // along surfaces it meets. `self` is a shape to ignore (0 for none).
 B3_GLUE_EXPORT float b3Glue_CastMover(uint32_t world, const float* origin3, const float* capsule7, const float* delta3, uint64_t self);
+
+// Fraction (0..1) of delta3 that an oriented box travels from origin3 before it hits something (1 when the path is clear).
+// Box3D's mover query is capsule only, so this is a plain shape cast of the box: it stops at the first hit and does not
+// slide. half3: half extents, quat4: box rotation (x y z w). `self` is a shape to ignore (0 for none). normal3 (may be NULL)
+// receives the hit normal, or 0 0 0 on a clear path.
+B3_GLUE_EXPORT float b3Glue_CastBoxMover(uint32_t world, const float* origin3, const float* half3, const float* quat4, const float* delta3, uint64_t self, float* normal3);

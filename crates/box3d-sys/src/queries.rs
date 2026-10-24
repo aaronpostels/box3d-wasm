@@ -20,6 +20,8 @@ extern "C" {
     /// `capsule7` is center1, center2, radius. Per plane: `ids[i]` and `planes4[4 * i ..]` (normal, offset).
     pub fn b3Glue_CollideMover(world: World, origin3: *const f32, capsule7: *const f32, self_shape: Shape, ids: *mut u64, planes4: *mut f32, max: i32) -> i32;
     pub fn b3Glue_CastMover(world: World, origin3: *const f32, capsule7: *const f32, delta3: *const f32, self_shape: Shape) -> f32;
+    /// Box cast: `normal3` may be null. See the C header for what it does and does not do.
+    pub fn b3Glue_CastBoxMover(world: World, origin3: *const f32, half3: *const f32, quat4: *const f32, delta3: *const f32, self_shape: Shape, normal3: *mut f32) -> f32;
 }
 
 /// A convex shape for casts and overlaps. Centred on the query origin.
@@ -160,6 +162,15 @@ pub fn collide_mover(world: World, origin: [f32; 3], capsule: Capsule, self_shap
 pub fn cast_mover(world: World, origin: [f32; 3], capsule: Capsule, delta: [f32; 3], self_shape: Option<Shape>) -> f32 {
     let c7 = capsule.encode();
     unsafe { b3Glue_CastMover(world, origin.as_ptr(), c7.as_ptr(), delta.as_ptr(), self_shape.unwrap_or(0)) }
+}
+
+/// Fraction (0..1) of `delta` an oriented box (half extents `half`, rotation `rotation` = x y z w) travels from `origin` before
+/// it hits something, plus the hit normal (zero when clear). Box3D's mover query is capsule only, so this is a plain
+/// shape cast: it stops at the first hit and does not slide. `self_shape` is ignored when given.
+pub fn cast_box_mover(world: World, origin: [f32; 3], half: [f32; 3], rotation: [f32; 4], delta: [f32; 3], self_shape: Option<Shape>) -> (f32, [f32; 3]) {
+    let mut n = [0.0f32; 3];
+    let f = unsafe { b3Glue_CastBoxMover(world, origin.as_ptr(), half.as_ptr(), rotation.as_ptr(), delta.as_ptr(), self_shape.unwrap_or(0), n.as_mut_ptr()) };
+    (f, n)
 }
 
 /// Runs a glue overlap call with a buffer, growing it once when the glue reports more ids than fit.

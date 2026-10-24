@@ -187,3 +187,39 @@ void b3Glue_WheelState(uint64_t joint, float* out3) {
     out3[1] = b3WheelJoint_GetSteeringAngle(j);
     out3[2] = b3WheelJoint_GetSpinTorque(j);
 }
+
+// ---- revolute and prismatic: spring and motor ----
+
+void b3Glue_RevoluteSetSpring(uint64_t joint, int enable, float hertz, float dampingRatio, float targetAngle) {
+    b3JointId j = jointOf(joint);
+    b3RevoluteJoint_EnableSpring(j, enable != 0);
+    b3RevoluteJoint_SetSpringHertz(j, hertz);
+    b3RevoluteJoint_SetSpringDampingRatio(j, dampingRatio);
+    b3RevoluteJoint_SetTargetAngle(j, targetAngle);
+}
+
+void b3Glue_RevoluteSetMotor(uint64_t joint, int enable, float speed, float maxTorque) {
+    b3JointId j = jointOf(joint);
+    b3RevoluteJoint_EnableMotor(j, enable != 0);
+    b3RevoluteJoint_SetMotorSpeed(j, speed);
+    b3RevoluteJoint_SetMaxMotorTorque(j, maxTorque);
+}
+
+float b3Glue_RevoluteAngle(uint64_t joint) { return b3RevoluteJoint_GetAngle(jointOf(joint)); }
+
+void b3Glue_PrismaticSetSpring(uint64_t joint, int enable, float hertz, float dampingRatio, float targetTranslation) {
+    b3JointId j = jointOf(joint);
+    b3PrismaticJoint_EnableSpring(j, enable != 0);
+    b3PrismaticJoint_SetSpringHertz(j, hertz);
+    b3PrismaticJoint_SetSpringDampingRatio(j, dampingRatio);
+    b3PrismaticJoint_SetTargetTranslation(j, targetTranslation);
+}
+
+void b3Glue_PrismaticSetMotor(uint64_t joint, int enable, float speed, float maxForce) {
+    b3JointId j = jointOf(joint);
+    b3PrismaticJoint_EnableMotor(j, enable != 0);
+    b3PrismaticJoint_SetMotorSpeed(j, speed);
+    b3PrismaticJoint_SetMaxMotorForce(j, maxForce);
+}
+
+float b3Glue_PrismaticTranslation(uint64_t joint) { return b3PrismaticJoint_GetTranslation(jointOf(joint)); }

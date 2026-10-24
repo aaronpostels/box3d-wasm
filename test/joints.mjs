@@ -13,7 +13,7 @@ const smokeWasm = new URL("../crates/box3d-smoke/target/wasm32-unknown-unknown/r
 const smoke = new WebAssembly.Instance(new WebAssembly.Module(readFileSync(smokeWasm)), {}).exports;
 assert.equal(typeof smoke.run_joints, "function", "smoke module should export run_joints");
 assert.equal(smoke.run_joints(), 0, "smoke joint checks failed");
-console.log("ok smoke joint checks: distance rod, spring, limit, motor; motor; filter; spherical; wheel");
+console.log("ok smoke joint checks: distance rod, spring, limit, motor; motor; filter; spherical; wheel; revolute and prismatic spring and motor");
 
 const distPath = resolve("dist", "box3d.js");
 if (!existsSync(distPath)) {
