@@ -30,8 +30,13 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Update Box3D Submodule (if scheduled/dispatched)
+      - name: Check whether upstream moved (scheduled/dispatched)
+        id: upstream
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: bash scripts/upstream_check.sh || [ $? = 10 ]
+
+      - name: Update Box3D Submodule (only when upstream moved)
+        if: steps.upstream.outputs.changed == 'true'
         run: |
           git submodule update --remote --merge vendor/box3d
 
@@ -113,6 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout Repository
@@ -127,20 +133,39 @@ jobs:
           name: box3d-wasm-dist
           path: dist/
 
-      - name: Commit Tested Submodule Revision
+      - name: Open the bump pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git -C vendor/box3d checkout ${{ needs.build.outputs.submodule-sha }}
+          SHA=${{ needs.build.outputs.submodule-sha }}
+          SHORT=$(echo "$SHA" | cut -c1-9)
+          git -C vendor/box3d checkout "$SHA"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "bump/box3d-$SHORT"
           git add vendor/box3d
-          git commit -m "chore(vendor): bump upstream box3d to ${{ needs.build.outputs.submodule-sha }}"
-          git push
+          git commit -m "chore(vendor): bump upstream box3d to $SHA"
+          git push origin "bump/box3d-$SHORT"
+          gh pr create --base main --head "bump/box3d-$SHORT" --title "Bump upstream Box3D to $SHORT"             --body "Built and tested from erincatto/box3d@$SHA by the scheduled job. Merging publishes the release."
+
+  release:
+    name: Publish release after a bump is merged
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'chore(vendor): bump upstream box3d')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Build
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: box3d-wasm-dist
+          path: dist/
 
       - name: Publish Release
         env:
           GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.build.outputs.submodule-sha }}
         run: |
-          SHORT=$(echo "${{ needs.build.outputs.submodule-sha }}" | cut -c1-9)
-          gh release create "box3d-$SHORT" dist/*.wasm dist/box3d*.js \
-            --title "Box3D $SHORT" \
-            --notes "Built from erincatto/box3d@${{ needs.build.outputs.submodule-sha }}. Files: box3d (SIMD), box3d.scalar, box3d.threads."
+          SHORT=$(echo "$SHA" | cut -c1-9)
+          gh release create "box3d-$SHORT" dist/*.wasm dist/box3d*.js             --repo "$GITHUB_REPOSITORY" --title "Box3D $SHORT"             --notes "Built from erincatto/box3d@$SHA. Files: box3d (SIMD), box3d.scalar, box3d.threads."
