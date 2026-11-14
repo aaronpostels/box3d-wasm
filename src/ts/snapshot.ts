@@ -52,7 +52,7 @@ export class Box3DSnapshotPlayer {
 
     /** Resets the world to the creation snapshot; world id and body ids stay valid. False if Box3D could not restore. */
     public restoreInPlace(): boolean {
-        return this.wasm._b3Glue_RestoreInPlace(this.player);
+        return Boolean(this.wasm._b3Glue_RestoreInPlace(this.player));
     }
 
     public destroy(): void {

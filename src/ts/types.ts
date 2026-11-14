@@ -342,7 +342,7 @@ export interface RawBox3DModule {
     _b3Glue_RestoreBodyCount(player: number): number;
     _b3Glue_RestoreBodyId(player: number, index: number): bigint;
     _b3Glue_RestoreDestroy(player: number): void;
-    _b3Glue_RestoreInPlace(player: number): boolean;
+    _b3Glue_RestoreInPlace(player: number): number;
     _b3Glue_ShapeUserMaterial(shape: bigint): bigint;
     _b3Glue_AddMesh(body: bigint, vertices: number, vertexCount: number, indices: number, triangleCount: number, scale3: number, friction: number, restitution: number, userMaterial: bigint, flags: number): bigint;
     _b3Glue_AddHeightfield(body: bigint, heights: number, countX: number, countZ: number, scale3: number, minHeight: number, maxHeight: number, friction: number, restitution: number, userMaterial: bigint, flags: number): bigint;
