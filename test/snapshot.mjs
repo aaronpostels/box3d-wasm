@@ -56,7 +56,7 @@ assert.deepEqual(again, original, "restored world diverged");
   assert.equal(run_restore_in_place(), 0, "smoke: restore in place failed");
 }
 if (typeof m._b3Glue_RestoreInPlace === "function") {
-  assert.equal(m._b3Glue_RestoreInPlace(player), true, "restoreInPlace");
+  assert.equal(m._b3Glue_RestoreInPlace(player), 1, "restoreInPlace");
   assert.equal(m._b3Glue_RestoreWorld(player), restored, "world id must not change");
   const back = [];
   for (let i = 1; i < n; i++) back.push(m._b3Glue_RestoreBodyId(player, i));
